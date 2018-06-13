@@ -6,6 +6,8 @@ from . import types
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
 
+cdef int parser_logging = 0
+
 # Can't do constants in cython :(
 cdef char dbus_char = 'y'
 cdef char dbus_bool = 'b'
@@ -75,14 +77,15 @@ cdef class RecursiveLogger:
         self.level -= 1
 
     def warning(RecursiveLogger self, str msg, *args, **kw):
-        msg = (' ' * self.level) + msg
-        self.logger.warning(msg, *args, **kw)
+        if parser_logging:
+            msg = (' ' * self.level) + msg
+            self.logger.warning(msg, *args, **kw)
 
 
 class BufferIsTooShort(IndexError):
     pass
 
-cdef class MessageBuffer:
+cdef class InputBuffer:
     cdef bytearray buffer
     cdef int offset
     cdef int message_length
@@ -93,13 +96,13 @@ cdef class MessageBuffer:
         self.log = RecursiveLogger(logger)
         self.reset()
 
-    cdef reset(MessageBuffer self):
+    cdef reset(InputBuffer self):
         self.buffer = bytearray()
         self.offset = 0
         self.message_length = 0
         self.current_message = message.Message()
 
-    cdef read_header(MessageBuffer self):
+    cdef read_header(InputBuffer self):
         # Header must be in the beginning, right?
         assert self.offset == 0
         cdef:
@@ -130,7 +133,7 @@ cdef class MessageBuffer:
                 self.consume_buffer()
                 return True
 
-    cdef consume_buffer(MessageBuffer self):
+    cdef consume_buffer(InputBuffer self):
         self.log.warning("Consumed first %d bytes", self.offset)
         self.buffer = self.buffer[self.offset:]
         self.offset = 0
@@ -138,7 +141,7 @@ cdef class MessageBuffer:
         # self.current_message = message.Message()
 
 
-    cdef try_reading_message(MessageBuffer self):
+    cdef try_reading_message(InputBuffer self):
         msg = None
         if self.message_length == 0:
             # Message length unknown, still have to read header
@@ -165,7 +168,7 @@ cdef class MessageBuffer:
                 self.current_message = message.Message()
         return msg
 
-    cpdef feed_data(MessageBuffer self, bytes data):
+    cpdef feed_data(InputBuffer self, bytes data):
         self.buffer.extend(data)
         if len(self.buffer) < 10:
             return []
@@ -180,7 +183,7 @@ cdef class MessageBuffer:
         return messages
 
 
-    cdef bytes pop(MessageBuffer self, int size, int alignment):
+    cdef bytes pop(InputBuffer self, int size, int alignment):
         self.align(alignment)
         if self.offset + size > len(self.buffer):
             raise BufferIsTooShort("Tried to pop [%d:%d], buffer len: %d" % (self.offset, self.offset + size, len(self.buffer)))
@@ -188,7 +191,7 @@ cdef class MessageBuffer:
         self.offset += size
         return bytes(ret)
 
-    cdef void align(MessageBuffer self, int alignment) except *:
+    cdef void align(InputBuffer self, int alignment) except *:
         cdef int n = get_alignment_offset(self.offset, alignment)
         if n > 0:
             with self.log:
@@ -200,13 +203,13 @@ cdef class MessageBuffer:
                         raise ValueError("Tried to drop non-zero bytes: %s" % (binascii.hexlify(dropped_data)))
 
 
-    cpdef to_str(MessageBuffer self):
+    cpdef to_str(InputBuffer self):
         return '[+%02d:%d] %s (%s)' % (self.offset, len(self.buffer), binascii.hexlify(self.buffer[self.offset:]), self.buffer[self.offset:])
 
     def __str__(self):
         return self.to_str()
 
-    cdef pop_primitive(MessageBuffer self, char signature):
+    cdef pop_primitive(InputBuffer self, char signature):
         cdef char* raw_data
         with self.log:
             primitive_size = alignments[signature]
@@ -241,7 +244,7 @@ cdef class MessageBuffer:
                 primitive_data), i))
             return i
 
-    cdef pop_single(MessageBuffer self, signature):
+    cdef pop_single(InputBuffer self, signature):
         cdef char datatype = signature[0]
         with self.log:
             if datatype == ord('('):
@@ -268,7 +271,7 @@ cdef class MessageBuffer:
             else:
                 raise NotImplementedError()
 
-    cdef pop_multiple(MessageBuffer self, signature):
+    cdef pop_multiple(InputBuffer self, signature):
         # FIXME real dict entry handling
         signature = signature.replace(b'{', b'(').replace(b'}', b')')
         with self.log:
@@ -277,14 +280,14 @@ cdef class MessageBuffer:
                 ret.append(self.pop_single(i))
             return ret
 
-    cpdef int pop_int32(MessageBuffer self) except*:
+    cpdef int pop_int32(InputBuffer self) except*:
         cdef bytes data
         with self.log:
             self.align(4)
             data = self.pop(4, 4)
             return (<stdint.int32_t*><char*>data)[0]
 
-    cpdef pop_array(MessageBuffer self, signature):
+    cpdef pop_array(InputBuffer self, signature):
         cdef int array_len = self.pop_int32()
         cdef int expected_end_offset
         with self.log:
@@ -301,7 +304,7 @@ cdef class MessageBuffer:
             return ret
         # assert buffer.offset == expected_end_offset
 
-    cpdef pop_string(MessageBuffer self):
+    cpdef pop_string(InputBuffer self):
         # self.log.warning(buf)
         cdef int str_l
         cdef bytes data
@@ -316,7 +319,7 @@ cdef class MessageBuffer:
             self.log.warning("Popped string %s", data)
             return data
 
-    cpdef pop_signature(MessageBuffer self):
+    cpdef pop_signature(InputBuffer self):
         cdef int l
         cdef bytes data
         with self.log:
@@ -327,7 +330,7 @@ cdef class MessageBuffer:
             self.log.warning("Popped signature %s", data)
             return types.Signature(data)
 
-    cpdef pop_variant(MessageBuffer self):
+    cpdef pop_variant(InputBuffer self):
         with self.log:
             self.log.warning("Popping variant from %s", self)
             sgn = self.pop_signature()
@@ -497,13 +500,13 @@ cpdef dump_struct(signature, args):
     return buf.buffer
 
 cpdef load_struct(signature, bytes data):
-    buf = MessageBuffer(data)
+    buf = InputBuffer(data)
     return buf.pop_single(signature)
 
 cpdef read_message(bytes buffer):
     cdef char end = buffer[0]
     logger.warning("Endianness: %s" % end)
-    buf = MessageBuffer(buffer)
+    buf = InputBuffer(buffer)
     header = buf.pop_multiple(b'yyyyuua(yv)')
     m = message.Message(header[1])
     fields = header[-1]
@@ -583,11 +586,9 @@ cpdef split_signature(signature):
     cdef int sign_idx = 0
     cdef list ret = []
     cdef int l = 0
-    # logger.warning('splitting %s', signature)
     while sign_idx < sign_len:
         l = get_next_item_length(signature, sign_idx)
         subsign = signature[sign_idx: sign_idx + l]
         ret.append(subsign)
         sign_idx += l
-    # logger.warning("result: %s -> %s", signature, ret)
     return ret

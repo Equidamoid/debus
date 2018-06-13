@@ -2,7 +2,7 @@ import asyncio
 import logging
 import binascii
 import os
-from .pybus_struct import MessageBuffer, OutputBuffer
+from .pybus_struct import InputBuffer, OutputBuffer
 from .message import Message, make_method_call, MessageType, HeaderField
 logger = logging.getLogger(__name__)
 from lxml import etree
@@ -16,10 +16,9 @@ class BusConnection:
     def __init__(self, socket_path):
         self.reader = None          # type: asyncio.StreamReader
         self.writer = None          # type: asyncio.StreamWriter
-        self.parser = MessageBuffer()
+        self.parser = InputBuffer()
         self.server_guid = None     # type: bytes
         self.socket_path = socket_path
-        # self.serializer = OutputBuffer()
 
     async def check_auth_result(self):
         result = (await self.reader.readline())
@@ -154,6 +153,7 @@ class DBusInterface:
             return self.methods[item]
         raise AttributeError
 
+
 class DBusObject:
     def __init__(self, bus, bus_name, object_path, introspect_result):
         # type: (ClientConnection, str, str, str) -> None
@@ -161,7 +161,6 @@ class DBusObject:
         self.bus_name = bus_name
         self.object_path = object_path
         self.interfaces = {}    # type: typing.Dict[str, DBusInterface]
-        # logger.warning(introspect_result.decode())
         tree = etree.parse(io.BytesIO(introspect_result))
         for interface_node in tree.xpath('/node/interface'):
             interface = DBusInterface(interface_node.get('name'))
@@ -240,7 +239,6 @@ class ClientConnection:
         obj = DBusObject(self, bus_name, object_path, result[0])
         obj.log(logger)
         return obj
-
 
     async def get_object_interface(self, bus_name, object_path, interface):
         return (await self.introspect(bus_name, object_path)).interfaces[interface]
