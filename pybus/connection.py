@@ -98,7 +98,6 @@ class BusConnection:
             data = await self.reader.read(1024)
             if len(data) == 0:
                 raise RuntimeError("Connection closed")
-            # print('recv', data)
             msgs = self.parser.feed_data(data)
         return msgs
 
@@ -107,7 +106,6 @@ class BusConnection:
         buf = OutputBuffer()
         buf.put_message(message)
         data = buf.get()
-        print('sending message', message)
         self.writer.write(data)
 
 
@@ -171,7 +169,6 @@ class DBusObject:
                 method_name = method_node.get('name')
                 method_obj = DBusMethod(self, interface, method_name, signature_in, signature_out)
                 interface.methods[method_name] = method_obj
-                logger.warning("[%d]%s", len(interface.methods), method_obj)
 
             for sig_node in interface_node.xpath('./signal'):
                 args = ''.join(sig_node.xpath("./arg/@type"))
@@ -200,7 +197,7 @@ class ClientConnection:
 
     async def run(self):
         while True:
-            msgs = await self.bus.recv()    # type: Message
+            msgs = await self.bus.recv()    # type: typing.List[Message]
             for msg in msgs:
                 try:
                     mt = msg.message_type
@@ -237,7 +234,6 @@ class ClientConnection:
         logger.warning("Introspecting %s %s", bus_name, object_path)
         result = await self.call(bus_name, 'org.freedesktop.DBus.Introspectable', object_path, 'Introspect')
         obj = DBusObject(self, bus_name, object_path, result[0])
-        obj.log(logger)
         return obj
 
     async def get_object_interface(self, bus_name, object_path, interface):

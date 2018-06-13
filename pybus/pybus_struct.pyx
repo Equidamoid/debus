@@ -22,24 +22,34 @@ cdef char dbus_double = 'd'
 cdef char dbus_array = 'a'
 cdef char dbus_variant = 'v'
 cdef char dbus_path = 'o'
+cdef char dbus_string = 's'
+cdef char dbus_signature = 'g'
+
+cdef bytes header_signature = b'yyyyuua(yv)'
 
 assert sizeof(double) == 8
 
 cdef int alignments[256]
 p_alignments = {
-    'y': 1,
-    'b': 4,
-    'n': 2,
-    'q': 2,
-    'i': 4,
-    'u': 4,
-    'x': 8,
-    't': 8,
-    'd': 8,
+    dbus_char: 1,
+    dbus_bool: 4,
+    dbus_int16: 2,
+    dbus_uint16: 2,
+    dbus_int32: 4,
+    dbus_uint32: 4,
+    dbus_int64: 8,
+    dbus_uint64: 8,
+    dbus_double: 8,
 }
 
-from_dict(p_alignments, alignments)
-primitives = set([ord(i) for i in p_alignments])
+cdef array_from_dict(dict kv, int array[]):
+    cdef int _k
+    for k, v in kv.items():
+        _k = k
+        array[_k] = v
+
+array_from_dict(p_alignments, alignments)
+primitives = set([i for i in p_alignments])
 
 ctypedef fused dbus_numbers:
     stdint.uint8_t
@@ -94,9 +104,6 @@ cdef class InputBuffer:
 
     def __init__(self):
         self.log = RecursiveLogger(logger)
-        self.reset()
-
-    cdef reset(InputBuffer self):
         self.buffer = bytearray()
         self.offset = 0
         self.message_length = 0
@@ -113,10 +120,12 @@ cdef class InputBuffer:
             stdint.uint32_t body_length
             stdint.uint32_t serial
         with self.log:
-            endianness, message_type, flags, major_version, body_length, serial, fields = self.pop_multiple(b'yyyyuua(yv)')
+            endianness, message_type, flags, major_version, body_length, serial, fields = self.pop_multiple(header_signature)
             self.log.warning("E: %d, MT: %d", endianness, message_type)
             assert major_version == 1
-            assert endianness == 'l', "Sorry (%s)"
+
+            # Should be pretty easy to implement, just rearrange the bytes it in pop_primitive
+            assert endianness == 'l', "Sorry, can't read big endian messages yet"
             self.current_message.serial = serial
             self.current_message.message_type = message.MessageType(message_type)
             self.current_message.flags = flags
@@ -125,7 +134,7 @@ cdef class InputBuffer:
 
             self.align(8)
             if body_length:
-                # We have some payload in the message, let's align to 8 bytes and compute required buffer lenght
+                # We have some payload in the message, let's align to 8 bytes and compute required buffer length
                 self.log.warning("Header read successfully, body: %d", body_length)
                 self.message_length = self.offset + body_length
             else:
@@ -178,7 +187,6 @@ cdef class InputBuffer:
             if msg is None:
                 break
             else:
-                # logger.error("Got message %s", msg)
                 messages.append(msg)
         return messages
 
@@ -238,10 +246,8 @@ cdef class InputBuffer:
                 i = int((<double*>raw_data)[0])
             else:
                 raise ValueError("Primitive signature not supported: %s" % signature)
-            # elif current_type == 'i':
-            #     i = int((<unsigned int*> (primitive_data))[0])
-            self.log.warning('Reading primitive %s (size %d): %r -> %s' % (chr(signature), primitive_size, binascii.hexlify(
-                primitive_data), i))
+            self.log.warning('Reading primitive %s (size %d): %r -> %s %s', chr(signature), primitive_size, binascii.hexlify(
+                primitive_data), i, alignments)
             return i
 
     cdef pop_single(InputBuffer self, signature):
@@ -251,18 +257,18 @@ cdef class InputBuffer:
                 assert signature[-1] == ord(')')
                 self.align(8)
                 return self.pop_multiple(signature[1:-1])
-            elif datatype == ord('a'):
+            elif datatype == dbus_array:
                 return self.pop_array(signature[1:])
-            elif datatype == ord('v'):
+            elif datatype == dbus_variant:
                 assert len(signature) == 1
                 return self.pop_variant()
-            elif datatype == ord('s'):
+            elif datatype == dbus_string:
                 assert len(signature) == 1
                 return self.pop_string()
-            elif datatype == ord('o'):
+            elif datatype == dbus_path:
                 assert len(signature) == 1
                 return types.ObjectPath(self.pop_string())
-            elif datatype == ord('g'):
+            elif datatype == dbus_signature:
                 assert len(signature) == 1
                 return self.pop_signature()
             elif datatype in primitives:
@@ -415,22 +421,22 @@ cdef class OutputBuffer:
             elif dtype == '(':
                 self.put_aligned(b'', 8)
                 self.put_multiple(signature[1:-1], arg)
-            elif dtype == 'a':
+            elif dtype == dbus_array:
                 self.put_array(signature[1:], arg)
-            elif dtype == 's':
+            elif dtype == dbus_string:
                 self.put_string(arg)
-            elif dtype == 'o':
+            elif dtype == dbus_path:
                 self.put_string(bytes(arg))
-            elif dtype == 'g':
+            elif dtype == dbus_signature:
                 self.put_signature(arg)
-            elif dtype == 'v':
+            elif dtype == dbus_variant:
                 # Oh man, variants... here come some chants
                 variant_sign = types.guess_signature(arg)
                 self.log.warning("Guessed variant signature %s", variant_sign)
                 self.put_variant(variant_sign, arg)
             elif dtype in primitives:
                 t_size = alignments[dtype]
-                if dtype == 'b':
+                if dtype == dbus_bool:
                     arg = 1 if arg else 0
                     self.serialize_primitive[stdint.uint32_t](arg)
                 elif dtype == 'y': self.serialize_primitive[stdint.uint8_t](arg)
@@ -468,7 +474,7 @@ cdef class OutputBuffer:
         with self.log:
             self.log.warning('Writing header')
             self.put_multiple(
-                b'yyyyuua(yv)', (
+                header_signature, (
                     b'l'[0],
                     msg.message_type,
                     0,
@@ -507,30 +513,13 @@ cpdef read_message(bytes buffer):
     cdef char end = buffer[0]
     logger.warning("Endianness: %s" % end)
     buf = InputBuffer(buffer)
-    header = buf.pop_multiple(b'yyyyuua(yv)')
-    m = message.Message(header[1])
-    fields = header[-1]
-    for k, v in fields:
-        m.headers[message.HeaderField(k)] = v
-
-    try:
-        pl_sign = m.headers[message.HeaderField.SIGNATURE]
-    except:
-        pass
-    else:
-        m.payload = buf.pop_multiple(pl_sign)
-    return m
+    return buf.try_reading_message()
 
 cpdef serialize_message(msg):
     b = OutputBuffer()
     b.put_message(msg)
     return bytes(b.buffer)
 
-cdef from_dict(dict kv, int array[]):
-    cdef int _k
-    for k, v in kv.items():
-        _k = ord(k.encode())
-        array[_k] = v
 
 cdef int get_alignment(char t) except *:
     if t in primitives:
@@ -541,9 +530,9 @@ cdef int get_alignment(char t) except *:
         return 1
     elif t == b's':
         return 4
-    logging.error("get alignment %s", t)
     raise NotImplementedError("Don't know alignment for %s", chr(t))
 
+# Parsing dbus signatures
 
 cdef int get_structure_length(signature, int offset) except *:
     logger.warning("struct len %s %d", signature, offset)
