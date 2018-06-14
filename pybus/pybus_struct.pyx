@@ -530,6 +530,8 @@ cdef int get_alignment(char t) except *:
         return 1
     elif t == b's':
         return 4
+    elif t == b'a':
+        return 4
     raise NotImplementedError("Don't know alignment for %s", chr(t))
 
 # Parsing dbus signatures
