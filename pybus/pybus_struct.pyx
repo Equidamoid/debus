@@ -514,10 +514,8 @@ cpdef load_struct(signature, bytes data):
     return buf.pop_single(signature)
 
 cpdef read_message(bytes buffer):
-    cdef char end = buffer[0]
-    logger.warning("Endianness: %s" % end)
-    buf = InputBuffer(buffer)
-    return buf.try_reading_message()
+    buf = InputBuffer()
+    return buf.feed_data(buffer)
 
 cpdef serialize_message(msg):
     b = OutputBuffer()
