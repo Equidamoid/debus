@@ -318,10 +318,14 @@ cdef class InputBuffer:
             self.log.warning("Pop string, buffer: %s", self)
             str_l = self.pop_int32()
             self.log.warning("Reading string of len %d, %s", str_l, self)
-            if not str_l:
-                return b''
-            data = self.pop(str_l, 1)
-            self.pop(1, 1)
+            if str_l:
+                data = self.pop(str_l, 1)
+            else:
+                data = b''
+
+            # zero byte after string
+            b = self.pop(1, 1)
+            assert b == b'\0'
             self.log.warning("Popped string %s", data)
             return data
 
