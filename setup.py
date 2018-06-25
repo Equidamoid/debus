@@ -8,5 +8,6 @@ setup(
     author='Vladimir Shapranov',
     author_email='equidamoid@gmail.com',
     url='https://github.com/Equidamoid/pybus',
-    ext_modules = cythonize("pybus/pybus_struct.pyx")
+    ext_modules=cythonize("pybus/pybus_struct.pyx"),
+    modules=["pybus"]
 )
