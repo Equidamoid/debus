@@ -3,11 +3,15 @@ import logging
 import binascii
 import os
 from .pybus_struct import InputBuffer, OutputBuffer
-from .message import Message, make_method_call, MessageType, HeaderField
+from .message import Message, make_mesage, MessageType, HeaderField
 logger = logging.getLogger(__name__)
 from lxml import etree
 import io
-import typing
+try:
+    import typing
+    StringOrBytes = typing.Union[str, bytes]
+except:
+    pass
 from pathlib import Path
 import hashlib
 
@@ -20,7 +24,7 @@ class BusConnection:
         self.server_guid = None     # type: bytes
         self.socket_path = socket_path
 
-    async def check_auth_result(self):
+    async def _check_auth_result(self):
         result = (await self.reader.readline())
         result_parts = result.split()
         status = result_parts[0]
@@ -31,17 +35,17 @@ class BusConnection:
             return True
         return False
 
-    async def do_auth_external(self):
+    async def _do_auth_external(self):
         logger.warning("Attempting external auth")
         self.writer.write(b"AUTH EXTERNAL %s\r\n" % binascii.hexlify(os.environ['USER'].encode()))
-        return await self.check_auth_result()
+        return await self._check_auth_result()
 
-    async def do_auth_anonymous(self):
+    async def _do_auth_anonymous(self):
         logger.warning("Attempting anonymous auth")
         self.writer.write(b"AUTH ANONYMOUS\r\n")
-        return await self.check_auth_result()
+        return await self._check_auth_result()
 
-    async def do_auth_cookie(self):
+    async def _do_auth_cookie(self):
         self.writer.write(b"AUTH DBUS_COOKIE_SHA1 %s\r\n" % binascii.hexlify(os.environ['USER'].encode()))
         resp = await self.reader.readline()
         resp_parts = resp.split()
@@ -69,7 +73,7 @@ class BusConnection:
             response = binascii.hexlify(b'%s %s' % (cli_challenge, response_hash))
             self.writer.write(b'DATA %s\r\n' % response)
             logger.warning("Response to hash: %s, hash: %s, response: %s", response, response_hash, response)
-            return await self.check_auth_result()
+            return await self._check_auth_result()
         else:
             raise RuntimeError("Unexpected response during DBUS_COOKIE_SHA1 auth: %r", resp)
 
@@ -82,21 +86,23 @@ class BusConnection:
         logger.warning("Auth types available: %s", auth_available)
         if False:
             pass
-        elif await self.do_auth_cookie():
+        elif await self._do_auth_cookie():
             pass
-        elif await self.do_auth_external():
+        elif await self._do_auth_external():
             pass
-        elif await self.do_auth_anonymous():
+        elif await self._do_auth_anonymous():
             pass
         else:
             logger.error("Can't authenticate with the server")
         self.writer.write(b'BEGIN\r\n')
 
     async def recv(self):
+        # type: () -> typing.List[Message]
         msgs = []
         while len(msgs) == 0:
             data = await self.reader.read(1024)
             if len(data) == 0:
+                logger.error("Connection closed, buffer content: %s", self.parser)
                 raise RuntimeError("Connection closed")
             msgs = self.parser.feed_data(data)
         return msgs
@@ -104,8 +110,14 @@ class BusConnection:
     async def send(self, message):
         # type: (Message) -> None
         buf = OutputBuffer()
-        buf.put_message(message)
+        try:
+            buf.put_message(message)
+
+        except:
+            logger.error("Unable to serialize message %s", message)
+            raise
         data = buf.get()
+        assert len(InputBuffer().feed_data(data)) == 1
         self.writer.write(data)
 
 
@@ -187,43 +199,69 @@ class DBusObject:
                 logger.warning("    %s", ifobj.signals[sname])
 
 
+async def get_freedesktop_interface(conn, name=None):
+    # type: (pybus.connection.ClientConnection, str) -> pybus.connection.DBusInterface
+    if name:
+        name = 'org.freedesktop.DBus.%s' % name
+    else:
+        name = 'org.freedesktop.DBus'
+    return await conn.get_object_interface('org.freedesktop.DBus', b'/org/freedesktop/DBus', name)
+
+
 class ClientConnection:
     def __init__(self, socket_path):
         self.bus = BusConnection(socket_path)
-        self.futures = {}
+        self.futures = {}       # type: typing.Dict[int, asyncio.Future]
 
     async def connect(self):
         await self.bus.connect_and_auth()
 
     async def run(self):
         while True:
-            msgs = await self.bus.recv()    # type: typing.List[Message]
+            msgs = await self.bus.recv()
             for msg in msgs:
+                logger.error("Don't know what to do with this: %s", msg)
                 try:
                     mt = msg.message_type
                     if mt in [MessageType.METHOD_RETURN, MessageType.ERROR]:
                         reply_to = msg.headers[HeaderField.REPLY_SERIAL]
-                        logger.warning("Got response to %s", reply_to)
-                        f = self.futures[reply_to]  # type: asyncio.Future
-                        if mt == MessageType.METHOD_RETURN:
-                            f.set_result(msg.payload)
+                        if reply_to in self.futures:
+                            logger.info("Got response to %d", reply_to)
+                            f = self.futures.pop(reply_to)  # type: asyncio.Future
+                            if mt == MessageType.METHOD_RETURN:
+                                f.set_result(msg.payload)
+                            else:
+                                f.set_exception(DBusError(msg.payload))
+                            continue
                         else:
-                            f.set_exception(DBusError(msg.payload))
+                            logging.warning("Received unexpected response message: %s", msg)
+                    elif mt == MessageType.SIGNAL:
+                        self.process_signal(msg)
+                    elif mt == MessageType.METHOD_CALL:
+                        self.process_method_call(msg)
+                    else:
+                        logger.error("Don't know what to do with this: %s", msg)
 
                 except:
                     logger.exception("Failed to process message %s", msg)
 
+    def process_signal(self, msg):
+        logger.error("Ignoring signal %s", msg)
+
+    def process_method_call(self, msg):
+        logger.error("Ignoring method call %s", msg)
+
     def call(self, bus_name, interface_name, object_path, method, signature=None, args=None):
+        # type: (StringOrBytes, StringOrBytes, StringOrBytes, StringOrBytes, StringOrBytes, typing.Any) -> typing.Any
         if isinstance(bus_name, str):
             bus_name = bus_name.encode()
         if isinstance(interface_name, str):
             interface_name = interface_name.encode()
         if isinstance(method, str):
             method = method.encode()
-        msg = make_method_call(bus_name, interface_name, method, object_path, signature)
-
-        if signature is not None:
-            msg.payload = args
+        if isinstance(signature, str):
+            signature = signature.encode()
+        msg = make_mesage(MessageType.METHOD_CALL, bus_name, interface_name, method, object_path, signature, args)
         f = asyncio.Future()
         self.futures[msg.serial] = f
         logger.warning("Sending method call: %s", msg)
@@ -231,11 +269,11 @@ class ClientConnection:
         return f
 
     async def introspect(self, bus_name, object_path):
-        logger.warning("Introspecting %s %s", bus_name, object_path)
+        logger.info("Introspecting %s %s", bus_name, object_path)
         result = await self.call(bus_name, 'org.freedesktop.DBus.Introspectable', object_path, 'Introspect')
         obj = DBusObject(self, bus_name, object_path, result[0])
         return obj
 
-    async def get_object_interface(self, bus_name, object_path, interface):
+    async def get_object_interface(self, bus_name, object_path, interface) -> DBusInterface:
         return (await self.introspect(bus_name, object_path)).interfaces[interface]
 

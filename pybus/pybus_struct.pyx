@@ -430,8 +430,12 @@ cdef class OutputBuffer:
             elif dtype == dbus_string:
                 self.put_string(arg)
             elif dtype == dbus_path:
-                self.put_string(bytes(arg))
+                arg_b = bytes(arg)
+                assert_valid_path(arg_b)
+                self.put_string(arg_b)
             elif dtype == dbus_signature:
+                # Try to parse the argument as a signature to check if it is valid
+                split_signature(arg)
                 self.put_signature(arg)
             elif dtype == dbus_variant:
                 # Oh man, variants... here come some chants
@@ -439,21 +443,25 @@ cdef class OutputBuffer:
                 self.log.warning("Guessed variant signature %s", variant_sign)
                 self.put_variant(variant_sign, arg)
             elif dtype in primitives:
-                t_size = alignments[dtype]
-                if dtype == dbus_bool:
-                    arg = 1 if arg else 0
-                    self.serialize_primitive[stdint.uint32_t](arg)
-                elif dtype == 'y': self.serialize_primitive[stdint.uint8_t](arg)
-                # elif dtype == b'b': serialize_primitive[stdint.uint32_t](arg, t_size)
-                elif dtype == 'n': self.serialize_primitive[stdint.int16_t](arg)
-                elif dtype == 'q': self.serialize_primitive[stdint.uint8_t](arg)
-                elif dtype == 'i': self.serialize_primitive[stdint.int32_t](arg)
-                elif dtype == 'u': self.serialize_primitive[stdint.uint32_t](arg)
-                elif dtype == 'x': self.serialize_primitive[stdint.int64_t](arg)
-                elif dtype == 't': self.serialize_primitive[stdint.uint64_t](arg)
-                elif dtype == 'd': self.serialize_primitive[double](arg)
-                else:
-                    raise NotImplementedError("Unknown primitive signature %s", dtype)
+                try:
+                    t_size = alignments[dtype]
+                    if dtype == dbus_bool:
+                        arg = 1 if arg else 0
+                        self.serialize_primitive[stdint.uint32_t](arg)
+                    elif dtype == 'y': self.serialize_primitive[stdint.uint8_t](arg)
+                    # elif dtype == b'b': serialize_primitive[stdint.uint32_t](arg, t_size)
+                    elif dtype == 'n': self.serialize_primitive[stdint.int16_t](arg)
+                    elif dtype == 'q': self.serialize_primitive[stdint.uint8_t](arg)
+                    elif dtype == 'i': self.serialize_primitive[stdint.int32_t](arg)
+                    elif dtype == 'u': self.serialize_primitive[stdint.uint32_t](arg)
+                    elif dtype == 'x': self.serialize_primitive[stdint.int64_t](arg)
+                    elif dtype == 't': self.serialize_primitive[stdint.uint64_t](arg)
+                    elif dtype == 'd': self.serialize_primitive[double](arg)
+                    else:
+                        raise NotImplementedError("Unknown primitive signature %s", dtype)
+                except TypeError:
+                    logger.error("Invalid value for primitive %s: %r", dtype, arg)
+                    raise
             else:
                 raise NotImplementedError("Don't know what to do with %s", signature)
 
@@ -467,7 +475,11 @@ cdef class OutputBuffer:
                 raise ValueError("Args length doesn't match signature length: %d vs %d" % (len(parts), len(args)))
 
             for sgn_item, data_item in zip(parts, args):
-                self.put_single(sgn_item, data_item)
+                try:
+                    self.put_single(sgn_item, data_item)
+                except:
+                    logger.error("Failed to put %r as type %s while serializing args: %r as %r", data_item, sgn_item, parts, args)
+                    raise
 
 
     cpdef put_message(OutputBuffer self, msg):
@@ -475,6 +487,8 @@ cdef class OutputBuffer:
         cdef int payload_start = -1
         cdef int payload_end = -1
         cdef stdint.uint32_t payload_len = 0
+        assert not msg.message_type is None
+        assert not msg.serial is None
         with self.log:
             self.log.warning('Writing header')
             self.put_multiple(
@@ -585,3 +599,12 @@ cpdef split_signature(signature):
         ret.append(subsign)
         sign_idx += l
     return ret
+
+cpdef assert_valid_path(bytes path):
+    if path[0] != ord(b'/'):
+        raise ValueError("Object path does not start with '/': %r (%d)" % (path, path[0]))
+    # TODO check for '[A-Z][a-z][0-9]_'
+    assert not b'//' in path, "Object path contains empty element ('//')"
+    if len(path) > 1:
+        assert path[-1] != ord(b'/'), "Object path ends with '/'"
+

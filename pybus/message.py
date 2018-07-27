@@ -38,20 +38,31 @@ class Message:
         self.serial = 1
         self.flags = 0
 
-
     def __str__(self):
-        return 'Message(%s, %s, %s)' % (self.message_type, self.headers, self.payload)
+        return 'Message(%s, [%s], %s)' % (
+            self.message_type,
+            ', '.join(['%s=%s' % (k.name, self.headers[k]) for k in sorted(self.headers)]),
+            self.payload)
 
 
-def make_method_call(bus_name, interface_name, method_name, object_path, signature=None):
-    m = Message()
-    m.message_type = MessageType.METHOD_CALL
-    m.serial = 10
-    m.headers[HeaderField.DESTINATION] = bus_name
-    m.headers[HeaderField.INTERFACE] = interface_name
-    if signature:
-        m.headers[HeaderField.SIGNATURE] = types.Signature(signature)
-    m.headers[HeaderField.PATH] = types.ObjectPath(object_path)
-    m.headers[HeaderField.MEMBER] = method_name
-    m.serial = next_serial()
-    return m
+def make_mesage(m_type: MessageType,
+                bus_name: bytes,
+                interface_name: bytes,
+                member: bytes,
+                object_path: bytes,
+                signature: bytes=None,
+                data=None) -> Message:
+    ret = Message()
+    ret.message_type = m_type
+    ret.headers[HeaderField.DESTINATION] = bus_name
+    ret.headers[HeaderField.INTERFACE] = interface_name
+    if signature is None:
+        assert data is None
+    else:
+        ret.headers[HeaderField.SIGNATURE] = types.Signature(signature)
+        ret.payload = data
+
+    ret.headers[HeaderField.PATH] = types.ObjectPath(object_path)
+    ret.headers[HeaderField.MEMBER] = member
+    ret.serial = next_serial()
+    return ret
