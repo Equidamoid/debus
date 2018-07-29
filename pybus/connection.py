@@ -2,6 +2,7 @@ import asyncio
 import logging
 import binascii
 import os
+import pybus.types
 from .pybus_struct import InputBuffer, OutputBuffer
 from .message import Message, make_mesage, MessageType, HeaderField
 logger = logging.getLogger(__name__)
@@ -220,7 +221,6 @@ class ClientConnection:
         while True:
             msgs = await self.bus.recv()
             for msg in msgs:
-                logger.error("Don't know what to do with this: %s", msg)
                 try:
                     mt = msg.message_type
                     if mt in [MessageType.METHOD_RETURN, MessageType.ERROR]:
@@ -246,10 +246,16 @@ class ClientConnection:
                     logger.exception("Failed to process message %s", msg)
 
     def process_signal(self, msg):
-        logger.error("Ignoring signal %s", msg)
+        logger.error("Received a signal: %s", msg)
 
     def process_method_call(self, msg):
-        logger.error("Ignoring method call %s", msg)
+        logger.error("Received a method call: %s, don't know what to do, sending NotImplemented error", msg)
+        err = Message()
+        err.message_type = MessageType.ERROR
+        err.headers[HeaderField.DESTINATION] = msg.headers[HeaderField.SENDER]
+        err.headers[HeaderField.REPLY_SERIAL] = pybus.types.enforce_type(msg.serial, b'u')
+        err.headers[HeaderField.ERROR_NAME] = b'space.equi.pybus.Error.NotImplemented'
+        asyncio.ensure_future(self.bus.send(err))
 
     def call(self, bus_name, interface_name, object_path, method, signature=None, args=None):
         # type: (StringOrBytes, StringOrBytes, StringOrBytes, StringOrBytes, StringOrBytes, typing.Any) -> typing.Any
