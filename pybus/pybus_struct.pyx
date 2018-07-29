@@ -439,8 +439,11 @@ cdef class OutputBuffer:
                 self.put_signature(arg)
             elif dtype == dbus_variant:
                 # Oh man, variants... here come some chants
-                variant_sign = types.guess_signature(arg)
-                self.log.warning("Guessed variant signature %s", variant_sign)
+                if isinstance(arg, types.enforce_type):
+                    variant_sign, arg = arg._signature, arg._value
+                else:
+                    variant_sign = types.guess_signature(arg)
+                    self.log.warning("Guessed variant signature for %r: %s", arg, variant_sign)
                 self.put_variant(variant_sign, arg)
             elif dtype in primitives:
                 try:
