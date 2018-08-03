@@ -428,6 +428,8 @@ cdef class OutputBuffer:
             elif dtype == dbus_array:
                 self.put_array(signature[1:], arg)
             elif dtype == dbus_string:
+                if isinstance(arg, str):
+                    arg = arg.encode()
                 self.put_string(arg)
             elif dtype == dbus_path:
                 arg_b = bytes(arg)

@@ -54,15 +54,18 @@ def make_mesage(m_type: MessageType,
                 data=None) -> Message:
     ret = Message()
     ret.message_type = m_type
-    ret.headers[HeaderField.DESTINATION] = bus_name
-    ret.headers[HeaderField.INTERFACE] = interface_name
+    if not bus_name is None:
+        ret.headers[HeaderField.DESTINATION] = bus_name
+    if not interface_name is None:
+        ret.headers[HeaderField.INTERFACE] = interface_name
     if signature is None:
         assert data is None
     else:
         ret.headers[HeaderField.SIGNATURE] = types.Signature(signature)
         ret.payload = data
-
-    ret.headers[HeaderField.PATH] = types.ObjectPath(object_path)
-    ret.headers[HeaderField.MEMBER] = member
+    if not object_path is None:
+        ret.headers[HeaderField.PATH] = types.ObjectPath(object_path)
+    if not member is None:
+        ret.headers[HeaderField.MEMBER] = member
     ret.serial = next_serial()
     return ret

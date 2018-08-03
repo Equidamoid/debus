@@ -8,6 +8,7 @@ from .message import Message, make_mesage, MessageType, HeaderField
 logger = logging.getLogger(__name__)
 from lxml import etree
 import io
+import inspect
 try:
     import typing
     StringOrBytes = typing.Union[str, bytes]
@@ -79,7 +80,10 @@ class BusConnection:
             raise RuntimeError("Unexpected response during DBUS_COOKIE_SHA1 auth: %r", resp)
 
     async def connect_and_auth(self):
-        self.reader, self.writer = await asyncio.open_unix_connection(self.socket_path)
+        if isinstance(self.socket_path, str):
+            self.reader, self.writer = await asyncio.open_unix_connection(self.socket_path)
+        else:
+            self.reader, self.writer = await asyncio.open_connection(self.socket_path[0], self.socket_path[1])
         self.writer.write(b"\0")
         self.writer.write(b"AUTH\r\n")
         response = await self.reader.readline()
@@ -136,7 +140,7 @@ class DBusMethod:
         self.signature_out = output
 
     def __call__(self, *args, **kwargs):
-        return self.obj.bus.call(self.obj.bus_name, self.iface.name, self.obj.object_path, self.name, self.signature, args)
+        return self.obj.bus.call(self.obj.bus_name, self.obj.object_path, self.iface.name, self.name, self.signature, args)
 
     def __str__(self):
         return '[%s].%s(%r)->%r' % (self.iface.name, self.name, self.signature, self.signature_out)
@@ -162,7 +166,7 @@ class DBusInterface:
     def __getattr__(self, item):
         if item in self.methods:
             return self.methods[item]
-        raise AttributeError
+        raise AttributeError(item)
 
 
 class DBusObject:
@@ -213,9 +217,13 @@ class ClientConnection:
     def __init__(self, socket_path):
         self.bus = BusConnection(socket_path)
         self.futures = {}       # type: typing.Dict[int, asyncio.Future]
+        self.freedesktop_interface = None
 
     async def connect(self):
         await self.bus.connect_and_auth()
+        asyncio.ensure_future(self.run())
+        await self.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'Hello', '', None)
+        self.freedesktop_interface = await get_freedesktop_interface(self)
 
     async def run(self):
         while True:
@@ -257,8 +265,8 @@ class ClientConnection:
         err.headers[HeaderField.ERROR_NAME] = b'space.equi.pybus.Error.NotImplemented'
         asyncio.ensure_future(self.bus.send(err))
 
-    def call(self, bus_name, interface_name, object_path, method, signature=None, args=None):
-        # type: (StringOrBytes, StringOrBytes, StringOrBytes, StringOrBytes, StringOrBytes, typing.Any) -> typing.Any
+    def call(self, bus_name, object_path, interface_name, method, signature=None, args=None, timeout=None):
+        # type: (StringOrBytes, StringOrBytes, StringOrBytes, StringOrBytes, StringOrBytes, typing.Any, float) -> typing.Any
         if isinstance(bus_name, str):
             bus_name = bus_name.encode()
         if isinstance(interface_name, str):
@@ -267,19 +275,28 @@ class ClientConnection:
             method = method.encode()
         if isinstance(signature, str):
             signature = signature.encode()
+        if isinstance(object_path, str):
+            object_path = object_path.encode()
         msg = make_mesage(MessageType.METHOD_CALL, bus_name, interface_name, method, object_path, signature, args)
         f = asyncio.Future()
         self.futures[msg.serial] = f
-        logger.warning("Sending method call: %s", msg)
+        logger.info("Sending method call: %s", msg)
+        if timeout:
+            def on_timeout():
+                if not f.done():
+                    f.set_exception(TimeoutError("Method call timed out: %s.%s" % (interface_name, method)))
+            asyncio.get_event_loop().call_later(timeout, on_timeout)
         asyncio.ensure_future(self.bus.send(msg))
         return f
 
     async def introspect(self, bus_name, object_path):
         logger.info("Introspecting %s %s", bus_name, object_path)
-        result = await self.call(bus_name, 'org.freedesktop.DBus.Introspectable', object_path, 'Introspect')
+        result = await self.call(bus_name, object_path, 'org.freedesktop.DBus.Introspectable', 'Introspect', timeout=10)
         obj = DBusObject(self, bus_name, object_path, result[0])
         return obj
 
     async def get_object_interface(self, bus_name, object_path, interface) -> DBusInterface:
         return (await self.introspect(bus_name, object_path)).interfaces[interface]
 
+    async def request_name(self, name: str):
+        await self.freedesktop_interface.RequestName(name)
