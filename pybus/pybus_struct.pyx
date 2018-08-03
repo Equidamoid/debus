@@ -206,7 +206,8 @@ cdef class InputBuffer:
                 dropped_data = self.buffer[self.offset: self.offset + n]
                 self.offset += n
                 self.log.warning('Dropping due to alignment (%d): %s' % (alignment, binascii.hexlify(dropped_data)))
-                for i in dropped_data:
+                # TODO why direct iteration gives false positives?
+                for i in list(dropped_data):
                     if i:
                         raise ValueError("Tried to drop non-zero bytes: %s" % (binascii.hexlify(dropped_data)))
 
