@@ -5,4 +5,4 @@ before_install:
  - pip3 install cython
 script:
  - pip3 install .
- - python3 -c "import pybus"
+ - cd ..; python3 -c "import pybus"
