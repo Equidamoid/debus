@@ -9,5 +9,5 @@ setuptools.setup(
     author_email='equidamoid@gmail.com',
     url='https://github.com/Equidamoid/pybus',
     ext_modules=cythonize("pybus/pybus_struct.pyx"),
-    modules=setuptools.find_packages(),
+    packages=setuptools.find_packages(),
 )
