@@ -40,6 +40,25 @@ async def try_dbus():
             logging.warning("No data for %s: %s", i.decode(), ex.args)
         logging.warning("pid of '%s' is %s", i.decode(), pid)
 
+    # Signals! Let's create a subscription manager (api is a bit ugly, I know)
+    sm = pybus.SubscriptionManager(c)
+    c.process_signal = sm.handle_message
+
+    # create a callback
+    def on_signal(msg):
+        logging.warning("Callback called for %s", msg)
+        # we only want one signal, so let's unsubscribe immediately
+        sm.unsubscribe(on_signal)
+
+    # and subsctribe
+    sm.subscribe(pybus.MatchRule(member='NameAcquired'), on_signal)
+
+    # Now let's cause a signal and wait a bit
+    freedesktop_dbus_if.RequestName('com.example.MyApp', 0)
+    await asyncio.sleep(2)
+    
+
+
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s - %(message)s')
