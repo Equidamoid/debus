@@ -456,7 +456,7 @@ cdef class OutputBuffer:
                     elif dtype == 'y': self.serialize_primitive[stdint.uint8_t](arg)
                     # elif dtype == b'b': serialize_primitive[stdint.uint32_t](arg, t_size)
                     elif dtype == 'n': self.serialize_primitive[stdint.int16_t](arg)
-                    elif dtype == 'q': self.serialize_primitive[stdint.uint8_t](arg)
+                    elif dtype == 'q': self.serialize_primitive[stdint.uint16_t](arg)
                     elif dtype == 'i': self.serialize_primitive[stdint.int32_t](arg)
                     elif dtype == 'u': self.serialize_primitive[stdint.uint32_t](arg)
                     elif dtype == 'x': self.serialize_primitive[stdint.int64_t](arg)
