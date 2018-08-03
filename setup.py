@@ -10,4 +10,7 @@ setuptools.setup(
     url='https://github.com/Equidamoid/pybus',
     ext_modules=cythonize("pybus/pybus_struct.pyx"),
     packages=setuptools.find_packages(),
+    install_requires=[
+        'lxml',
+    ]
 )
