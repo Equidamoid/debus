@@ -1,7 +1,7 @@
-from distutils.core import setup
+import setuptools
 from Cython.Build import cythonize
 
-setup(
+setuptools.setup(
     name='pybus',
     version='0.1',
     description='DBus wire protocol implementation',
@@ -9,5 +9,5 @@ setup(
     author_email='equidamoid@gmail.com',
     url='https://github.com/Equidamoid/pybus',
     ext_modules=cythonize("pybus/pybus_struct.pyx"),
-    modules=["pybus"]
+    modules=setuptools.find_packages(),
 )
