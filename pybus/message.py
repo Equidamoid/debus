@@ -29,8 +29,37 @@ def next_serial():
     _next_serial += 1
     return _next_serial
 
+def _str_field_property(field: HeaderField, cast_to=None):
+    def getter(msg):
+        ret = msg.headers.get(field, None)
+        if isinstance(ret, bytes):
+            ret = ret.decode()
+        return ret
+
+    def setter(msg, value):
+        if value is None:
+            deleter(msg)
+        else:
+            if isinstance(value, str):
+                value = value.encode()
+            if cast_to:
+                value = cast_to(value)
+            msg.headers[field] = value
+
+    def deleter(msg):
+        del msg.headers[field]
+
+    return getter, setter, deleter
 
 class Message:
+    member = property(*_str_field_property(HeaderField.MEMBER))
+    interface = property(*_str_field_property(HeaderField.INTERFACE))
+    sender = property(*_str_field_property(HeaderField.SENDER))
+    destination = property(*_str_field_property(HeaderField.DESTINATION))
+    error_name = property(*_str_field_property(HeaderField.ERROR_NAME))
+    path = property(*_str_field_property(HeaderField.PATH, types.ObjectPath))
+    signature = property(*_str_field_property(HeaderField.SIGNATURE, types.Signature))
+
     def __init__(self):
         self.headers = {}                                   # type: typing.Dict[HeaderField, object]
         self.message_type = None                             # type: MessageType
@@ -43,6 +72,21 @@ class Message:
             self.message_type,
             ', '.join(['%s=%s' % (k.name, self.headers[k]) for k in sorted(self.headers)]),
             self.payload)
+
+    @property
+    def reply_serial(self):
+        return self.headers[HeaderField.REPLY_SERIAL].value
+
+    @reply_serial.setter
+    def reply_serial(self, v: str):
+        if v:
+            self.headers[HeaderField.REPLY_SERIAL] = types.enforce_type(v, b'u')
+        else:
+            del self.reply_serial
+
+    @reply_serial.deleter
+    def reply_serial(self):
+        del self.headers[HeaderField.REPLY_SERIAL]
 
 
 def make_mesage(m_type: MessageType,
