@@ -18,8 +18,20 @@ class enforce_type:
     To be used as a function, like `call_with_variant_argument(enforce_type(b'u', 42))`, thus function-style name
     """
     def __init__(self, value, signature: bytes):
+        assert isinstance(signature, bytes)
         self._value = value
         self._signature = signature
+
+    @property
+    def signature(self):
+        return self._signature
+
+    @property
+    def value(self):
+        return self._value
+
+    def __repr__(self):
+        return '<enforce_type[%s](%r)>' % (self.signature.decode(), self._value)
 
 
 def guess_signature(arg):

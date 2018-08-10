@@ -289,6 +289,23 @@ class ClientConnection:
         asyncio.ensure_future(self.bus.send(msg))
         return f
 
+    def emit(self, object_path: str, interface_name: str, signal_name: str, signature=None, args=None):
+        msg = Message()
+        msg.message_type = MessageType.SIGNAL
+        msg.interface = interface_name
+        msg.path = object_path
+        msg.member = signal_name
+        if not signature is None:
+            assert args
+            msg.signature = signature
+            msg.payload = args
+        # print(msg)
+        logger.warning("Going to send %s", msg)
+        asyncio.ensure_future(self.bus.send(msg))
+
+    def send_message(self, msg: Message):
+        asyncio.ensure_future(self.bus.send(msg))
+
     async def introspect(self, bus_name, object_path):
         logger.info("Introspecting %s %s", bus_name, object_path)
         result = await self.call(bus_name, object_path, 'org.freedesktop.DBus.Introspectable', 'Introspect', timeout=10)

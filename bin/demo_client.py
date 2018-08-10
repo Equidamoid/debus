@@ -1,12 +1,17 @@
 import asyncio
 import pybus.connection
 import pybus.message
+import pybus.types
+import pybus.objects
+import pybus.introspect
 import pybus
 import logging
 import os
 
 systembus = '/opt/local/var/run/dbus/system_bus_socket'
 sessionbus = os.environ['DBUS_LAUNCHD_SESSION_BUS_SOCKET']
+
+logger = logging.getLogger(__name__)
 
 async def try_dbus():
     # Let's connect to a bus first
@@ -47,6 +52,8 @@ async def try_dbus():
     # create a callback
     def on_signal(msg):
         logging.warning("Callback called for %s", msg)
+        # hacky way to get a boolean to outer scope
+        on_signal.ok = True
         # we only want one signal, so let's unsubscribe immediately
         sm.unsubscribe(on_signal)
 
@@ -54,10 +61,43 @@ async def try_dbus():
     sm.subscribe(pybus.MatchRule(member='NameAcquired'), on_signal)
 
     # Now let's cause a signal and wait a bit
-    freedesktop_dbus_if.RequestName('com.example.MyApp', 0)
+    await freedesktop_dbus_if.RequestName('space.equi.pybustest_bus', 0)
     await asyncio.sleep(2)
-    
+    # ... and we got our signal
+    assert on_signal.ok
 
+    # Exposing objects
+    om = pybus.objects.ObjectManager(c)
+    c.process_method_call = om.handle_call
+
+    # Define an interface
+    class TestIface(pybus.objects.DBusInterface):
+        name = 'space.equi.pybustest'
+
+        @pybus.objects.dbus_method('i', 'i')
+        def Test(self, obj, i):
+            logging.info("Adding 42 to %d", i)
+            self.TestReceived(obj, i)
+            return i + 42
+
+        @pybus.objects.dbus_signal('i')
+        def TestReceived(self, obj, i):
+            pass
+
+    # Create an object
+    obj = pybus.objects.DBusObject(c, '/test/path')
+
+    # Add interface to your object
+    obj.add_interface(TestIface())
+    # Also add the standard Introspect interface
+    obj.add_interface(pybus.introspect.IntrospectInterface())
+    # register the object
+    om.register_object(obj)
+
+    # Now, let's call a method and see what happens
+    remote_if = await c.get_object_interface('space.equi.pybustest_bus', '/test/path', 'space.equi.pybustest')
+    ret = await remote_if.Test(4200)
+    logger.warning("Response: %d", ret[0])
 
 
 if __name__ == '__main__':
