@@ -19,12 +19,21 @@ import hashlib
 
 
 class BusConnection:
-    def __init__(self, socket_path):
+    def __init__(self, socket=None, uri=None):
+        assert (socket is None) != (uri is None)
         self.reader = None          # type: asyncio.StreamReader
         self.writer = None          # type: asyncio.StreamWriter
         self.parser = InputBuffer()
         self.server_guid = None     # type: bytes
-        self.socket_path = socket_path
+        if uri:
+            kind, params = uri.split(':')
+            params = {k:v for k,v in [i.split('=') for i in params.split(',')]}
+            logger.warning("Uri %r parsed, have to connect via %s with parameters %s", uri, kind, params)
+            if kind == 'tcp':
+                socket = (params['host'], int(params['port']))
+            elif kind == 'unix':
+                socket = params['path']
+        self.socket_path = socket
 
     async def _check_auth_result(self):
         result = (await self.reader.readline())
@@ -214,8 +223,8 @@ async def get_freedesktop_interface(conn, name=None):
 
 
 class ClientConnection:
-    def __init__(self, socket_path):
-        self.bus = BusConnection(socket_path)
+    def __init__(self, socket=None, uri=None):
+        self.bus = BusConnection(socket=socket, uri=uri)
         self.futures = {}       # type: typing.Dict[int, asyncio.Future]
         self.freedesktop_interface = None
 
