@@ -8,6 +8,6 @@ before_install:
 script:
  - pip3 install .
  - cd ..; python3 -c "import pybus"
- - export DBUS_LAUNCHD_SESSION_BUS_SOCKET=./dbus-sock
- - dbus-daemon --session --address unix:path=$DBUS_LAUNCHD_SESSION_BUS_SOCKET --fork
+ - export DBUS_SESSION_BUS_SOCKET=unix:path=./dbus-sock
+ - dbus-daemon --session --address $DBUS_SESSION_BUS_SOCKET --fork
  - python3 ./pybus/bin/demo_client.py
