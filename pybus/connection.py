@@ -21,7 +21,7 @@ class DBusError(RuntimeError):
 
 class DBusMethod:
     def __init__(self, obj, iface, name, signature, output):
-        # type: (DBusObject, DBusInterface, str, str, str) -> None
+        # type: (IntrospectedObject, IntrospectedInterface, str, str, str) -> None
         self.obj = obj
         self.iface = iface
         self.name = name
@@ -35,7 +35,7 @@ class DBusMethod:
         return '[%s].%s(%r)->%r' % (self.iface.name, self.name, self.signature, self.signature_out)
 
 
-class DBusSignal:
+class IntrospectedSignal:
     def __init__(self, obj, iface, name, signature):
         self.obj = obj
         self.iface = iface
@@ -46,7 +46,7 @@ class DBusSignal:
         return '[%s].%s (%s)' % (self.iface.name, self.name, self.signature)
 
 
-class DBusInterface:
+class IntrospectedInterface:
     def __init__(self, name):
         self.name = name
         self.signals = {}
@@ -58,16 +58,16 @@ class DBusInterface:
         raise AttributeError(item)
 
 
-class DBusObject:
+class IntrospectedObject:
     def __init__(self, bus, bus_name, object_path, introspect_result):
         # type: (ClientConnection, str, str, str) -> None
         self.bus = bus              # type: ClientConnection
         self.bus_name = bus_name
         self.object_path = object_path
-        self.interfaces = {}    # type: typing.Dict[str, DBusInterface]
+        self.interfaces = {}    # type: typing.Dict[str, IntrospectedInterface]
         tree = etree.parse(io.BytesIO(introspect_result))
         for interface_node in tree.xpath('/node/interface'):
-            interface = DBusInterface(interface_node.get('name'))
+            interface = IntrospectedInterface(interface_node.get('name'))
             self.interfaces[interface.name] = interface
             for method_node in interface_node.xpath('./method'):
                 signature_in = ''.join(method_node.xpath("./arg[@direction='in']/@type"))
@@ -79,7 +79,7 @@ class DBusObject:
             for sig_node in interface_node.xpath('./signal'):
                 args = ''.join(sig_node.xpath("./arg/@type"))
                 name = sig_node.get('name')
-                signal = DBusSignal(self, interface, name, ''.join(args))
+                signal = IntrospectedSignal(self, interface, name, ''.join(args))
                 interface.signals[name] = signal
 
     def log(self, logger):
@@ -104,27 +104,27 @@ async def get_freedesktop_interface(conn, name=None):
 
 class ClientConnection:
     def __init__(self, socket=None, uri=None):
-        self.bus = WireConnection(socket=socket, uri=uri)
-        self.futures = {}       # type: typing.Dict[int, asyncio.Future]
-        self.freedesktop_interface = None
+        self._wire = WireConnection(socket=socket, uri=uri)
+        self._futures = {}       # type: typing.Dict[int, asyncio.Future]
+        self._freedesktop_interface = None
 
     async def connect(self):
-        await self.bus.connect_and_auth()
+        await self._wire.connect_and_auth()
         asyncio.ensure_future(self.run())
         await self.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'Hello', '', None)
-        self.freedesktop_interface = await get_freedesktop_interface(self)
+        self._freedesktop_interface = await get_freedesktop_interface(self)
 
     async def run(self):
         while True:
-            msgs = await self.bus.recv()
+            msgs = await self._wire.recv()
             for msg in msgs:
                 try:
                     mt = msg.message_type
                     if mt in [MessageType.METHOD_RETURN, MessageType.ERROR]:
                         reply_to = msg.headers[HeaderField.REPLY_SERIAL]
-                        if reply_to in self.futures:
+                        if reply_to in self._futures:
                             logger.info("Got response to %d", reply_to)
-                            f = self.futures.pop(reply_to)  # type: asyncio.Future
+                            f = self._futures.pop(reply_to)  # type: asyncio.Future
                             if mt == MessageType.METHOD_RETURN:
                                 f.set_result(msg.payload)
                             else:
@@ -168,7 +168,7 @@ class ClientConnection:
             object_path = object_path.encode()
         msg = make_mesage(MessageType.METHOD_CALL, bus_name, interface_name, method, object_path, signature, args)
         f = asyncio.Future()
-        self.futures[msg.serial] = f
+        self._futures[msg.serial] = f
         logger.info("Sending method call: %s", msg)
         if timeout:
             def on_timeout():
@@ -193,16 +193,20 @@ class ClientConnection:
         self.send_message(msg)
 
     def send_message(self, msg: Message):
-        asyncio.ensure_future(self.bus.send(msg))
+        asyncio.ensure_future(self._wire.send(msg))
 
     async def introspect(self, bus_name, object_path):
         logger.info("Introspecting %s %s", bus_name, object_path)
         result = await self.call(bus_name, object_path, 'org.freedesktop.DBus.Introspectable', 'Introspect', timeout=10)
-        obj = DBusObject(self, bus_name, object_path, result[0])
+        obj = IntrospectedObject(self, bus_name, object_path, result[0])
         return obj
 
-    async def get_object_interface(self, bus_name, object_path, interface) -> DBusInterface:
+    async def get_object_interface(self, bus_name, object_path, interface) -> IntrospectedInterface:
         return (await self.introspect(bus_name, object_path)).interfaces[interface]
 
     async def request_name(self, name: str):
-        await self.freedesktop_interface.RequestName(name)
+        await self._freedesktop_interface.RequestName(name)
+
+    @property
+    def freedesktop_interface(self):
+        return self._freedesktop_interface
