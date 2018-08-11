@@ -64,10 +64,10 @@ class DBusInterface:
 
 
 class DBusObject:
-    def __init__(self, bus, path):
-        # type: (pybus.ClientConnection)->None
+    def __init__(self, conn, path):
+        # type: (pybus.ManagedConnection)->None
         self._interfaces = {}
-        self._bus = bus
+        self._bus = conn._connection
         self._path = path
 
     @property

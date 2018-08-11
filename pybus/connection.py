@@ -2,8 +2,8 @@ import asyncio
 import logging
 import pybus.types
 from pybus.wire import WireConnection
+import pybus.objects
 from .message import Message, make_mesage, MessageType, HeaderField
-logger = logging.getLogger(__name__)
 from lxml import etree
 import io
 
@@ -14,6 +14,7 @@ try:
 except:
     pass
 
+logger = logging.getLogger(__name__)
 
 class DBusError(RuntimeError):
     pass
@@ -121,7 +122,7 @@ class ClientConnection:
                 try:
                     mt = msg.message_type
                     if mt in [MessageType.METHOD_RETURN, MessageType.ERROR]:
-                        reply_to = msg.headers[HeaderField.REPLY_SERIAL]
+                        reply_to = msg.reply_serial
                         if reply_to in self._futures:
                             logger.info("Got response to %d", reply_to)
                             f = self._futures.pop(reply_to)  # type: asyncio.Future
@@ -210,3 +211,24 @@ class ClientConnection:
     @property
     def freedesktop_interface(self):
         return self._freedesktop_interface
+
+
+class ManagedConnection:
+    def __init__(self, uri):
+        self._connection = ClientConnection(uri=uri)
+        self._sub_mgr = pybus.subscription.SubscriptionManager(self._connection)
+        self._connection.process_signal = self._sub_mgr.handle_message
+
+        self._obj_mgr = pybus.objects.ObjectManager(self._connection)
+        self._connection.process_method_call = self._obj_mgr.handle_call
+
+    async def connect(self):
+        await self._connection.connect()
+
+    @property
+    def sub_mgr(self):
+        return self._sub_mgr
+
+    @property
+    def obj_mgr(self):
+        return self._obj_mgr

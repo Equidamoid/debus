@@ -1,13 +1,11 @@
 import asyncio
-import pybus.connection
-import pybus.message
-import pybus.types
-import pybus.objects
-import pybus.introspect
-import pybus
 import logging
 import os
 import sys
+
+import pybus
+import pybus.objects
+import pybus.introspect
 
 if sys.platform.startswith('darwin'):
     systembus = 'unix:path=/opt/local/var/run/dbus/system_bus_socket'
@@ -20,20 +18,24 @@ logger = logging.getLogger(__name__)
 
 async def try_dbus():
     # Let's connect to a bus first
-    c = pybus.connection.ClientConnection(uri=sessionbus)
+    c = pybus.ManagedConnection(uri=sessionbus)
+    # c = pybus.connection.ClientConnection(('192.168.1.13', 33333))
     await c.connect()
 
+    ## Low-level interface: ClientConnection class
+    # Here I will use "private" field c._connection for simplicity,
+    # but if you need you can create an instance of ClientConnection yourself
     # Method calls, low-level way:
-    machine_id = await c.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'GetId', '', None)
+    machine_id = await c._connection.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'GetId', '', None)
     logging.warning("GetMachineId result: %s", machine_id)
 
     # Introspection
-    int_result = await c.introspect('org.freedesktop.DBus', '/org/freedesktop/DBus')
+    int_result = await c._connection.introspect('org.freedesktop.DBus', '/org/freedesktop/DBus')
     logging.warning("Introspection results for org.freedesktop.DBus:")
     int_result.log(logging)
 
     # Getting an object interface for more convenient calls
-    freedesktop_dbus_if = await c.get_object_interface('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus')
+    freedesktop_dbus_if = await c._connection.get_object_interface('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus')
 
     # and using it to make some calls
     all_names = await freedesktop_dbus_if.ListNames()
@@ -50,9 +52,9 @@ async def try_dbus():
             logging.warning("No data for %s: %s", i.decode(), ex.args)
         logging.warning("pid of '%s' is %s", i.decode(), pid)
 
-    # Signals! Let's create a subscription manager (api is a bit ugly, I know)
-    sm = pybus.SubscriptionManager(c)
-    c.process_signal = sm.handle_message
+    # Signals!
+    # get a subscription manager
+    sm = c.sub_mgr
 
     # create a callback
     def on_signal(msg):
@@ -72,8 +74,7 @@ async def try_dbus():
     assert on_signal.ok
 
     # Exposing objects
-    om = pybus.objects.ObjectManager(c)
-    c.process_method_call = om.handle_call
+    om = c.obj_mgr
 
     # Define an interface
     class TestIface(pybus.objects.DBusInterface):
@@ -100,7 +101,7 @@ async def try_dbus():
     om.register_object(obj)
 
     # Now, let's call a method and see what happens
-    remote_if = await c.get_object_interface('space.equi.pybustest_bus', '/test/path', 'space.equi.pybustest')
+    remote_if = await c._connection.get_object_interface('space.equi.pybustest_bus', '/test/path', 'space.equi.pybustest')
     ret = await remote_if.Test(4200)
     logger.warning("Response: %d", ret[0])
 

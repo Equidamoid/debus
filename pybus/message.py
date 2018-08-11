@@ -74,11 +74,14 @@ class Message:
             self.payload)
 
     @property
-    def reply_serial(self):
-        return self.headers[HeaderField.REPLY_SERIAL].value
+    def reply_serial(self) -> int:
+        v = self.headers[HeaderField.REPLY_SERIAL]
+        if isinstance(v, types.enforce_type):
+            v = v.value
+        return v
 
     @reply_serial.setter
-    def reply_serial(self, v: str):
+    def reply_serial(self, v: int):
         if v:
             self.headers[HeaderField.REPLY_SERIAL] = types.enforce_type(v, b'u')
         else:
