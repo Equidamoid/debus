@@ -84,7 +84,16 @@ async def try_dbus():
         def Test(self, obj, i):
             logging.info("Adding 42 to %d", i)
             self.TestReceived(obj, i)
-            return i + 42
+            # DBus can have multiple "out arguments", so here we return a tuple of one
+            return i + 42,
+
+        # You can also expose coroutines
+        @pybus.objects.dbus_method('i', 'i')
+        async def TestAsync(self, obj, i):
+            logging.info("Adding 42 to %d asyncronously", i)
+            await asyncio.sleep(2)
+            self.TestReceived(obj, i)
+            return i + 42,
 
         @pybus.objects.dbus_signal('i')
         def TestReceived(self, obj, i):
@@ -104,6 +113,8 @@ async def try_dbus():
     remote_if = await c._connection.get_object_interface('space.equi.pybustest_bus', '/test/path', 'space.equi.pybustest')
     ret = await remote_if.Test(4200)
     logger.warning("Response: %d", ret[0])
+    ret = await remote_if.TestAsync(424200)
+    logger.warning("Async response: %d", ret[0])
 
 
 if __name__ == '__main__':

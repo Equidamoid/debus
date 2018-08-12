@@ -8,12 +8,13 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
-def dbus_method(signature: str, return_signature: str, name: str=None):
+def dbus_method(signature: str, return_signature: str, name: str=None, single_return_value=True):
     def dec(foo):
         method_name = name or foo.__name__
         foo._pybus_method_name = method_name
         foo._pybus_method_signature = signature
         foo._pybus_method_return_signature = return_signature
+        foo._pybus_method_single_return = single_return_value
         return foo
     return dec
 
@@ -51,7 +52,7 @@ class DBusInterface:
             sig = method._pybus_method_return_signature
             args = [] if msg.payload is None else msg.payload
             ret = method(self, obj, *args)
-            return pybus.types.enforce_type((ret, ), sig.encode())
+            return pybus.types.enforce_type(ret, sig.encode())
         raise NotImplementedError('Unknown method %s, existing methods: %s' % (msg.member, self._dbus_methods.keys()))
 
     @property
@@ -97,11 +98,12 @@ class ObjectManager:
     def register_object(self, obj: DBusObject):
         self._objects[obj.path] = obj
 
-    async def send_return_async(self, method_call: pybus.message.Message, ret_future: asyncio.Future):
+    async def send_return_async(self, method_call: pybus.message.Message, ret: pybus.types.enforce_type):
         try:
-            ret = await ret_future
+            ret._value = await ret.value
             self.send_return(method_call, ret)
         except Exception as ex:
+            logger.exception("Exception during method call %s", method_call)
             self.send_error(method_call, ex)
 
     def send_error(self, method_call: pybus.message.Message, exc: Exception):
@@ -135,8 +137,8 @@ class ObjectManager:
         ret = None
         try:
             if msg.path in self._objects:
-                ret = self._objects[msg.path].on_method_call(msg)
-                if isinstance(ret, asyncio.Future):
+                ret = self._objects[msg.path].on_method_call(msg)      # type: pybus.types.enforce_type
+                if isinstance(ret.value, asyncio.Future) or inspect.iscoroutine(ret.value):
                     asyncio.ensure_future(self.send_return_async(msg, ret))
                 else:
                     self.send_return(msg, ret)

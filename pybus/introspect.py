@@ -38,4 +38,4 @@ class IntrospectInterface(DBusInterface):
                     signal_node.append(arg_node)
                 iface_node.append(signal_node)
             root.append(iface_node)
-        return etree.tostring(root, pretty_print=True)
+        return etree.tostring(root, pretty_print=True),

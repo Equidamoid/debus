@@ -206,7 +206,7 @@ class ClientConnection:
         return (await self.introspect(bus_name, object_path)).interfaces[interface]
 
     async def request_name(self, name: str):
-        await self._freedesktop_interface.RequestName(name)
+        await self._freedesktop_interface.RequestName(name, 0)
 
     @property
     def freedesktop_interface(self):
