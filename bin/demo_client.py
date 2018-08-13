@@ -5,7 +5,7 @@ import sys
 
 import pybus
 import pybus.objects
-import pybus.introspect
+import pybus.freedesktop.introspect
 
 if sys.platform.startswith('darwin'):
     systembus = 'unix:path=/opt/local/var/run/dbus/system_bus_socket'
@@ -105,7 +105,7 @@ async def try_dbus():
     # Add interface to your object
     obj.add_interface(TestIface())
     # Also add the standard Introspect interface
-    obj.add_interface(pybus.introspect.IntrospectInterface())
+    obj.add_interface(pybus.freedesktop.introspect.IntrospectInterface())
     # register the object
     om.register_object(obj)
 

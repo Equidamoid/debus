@@ -96,11 +96,11 @@ class ObjectManager:
     def __init__(self, bus):
         # type: (pybus.ClientConnection)->None
         # FIXME cyclic dependency :-/
-        import pybus.introspect
+        import pybus.freedesktop.introspect
         self._objects = {}
         self._bus = bus
         self.root_object = DBusObject(self._bus, '/')
-        self.root_introspect = pybus.introspect.IntrospectInterface()
+        self.root_introspect = pybus.freedesktop.introspect.IntrospectInterface()
         self.root_object.add_interface(self.root_introspect)
         self.register_object(self.root_object)
 
