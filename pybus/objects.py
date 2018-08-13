@@ -68,7 +68,10 @@ class DBusObject:
     def __init__(self, conn, path):
         # type: (pybus.ManagedConnection)->None
         self._interfaces = {}
-        self._bus = conn._connection
+        if isinstance(conn, pybus.ClientConnection):
+            self._bus = conn
+        else:
+            self._bus = conn._connection
         self._path = path
 
     @property
@@ -92,11 +95,18 @@ class DBusObject:
 class ObjectManager:
     def __init__(self, bus):
         # type: (pybus.ClientConnection)->None
+        # FIXME cyclic dependency :-/
+        import pybus.introspect
         self._objects = {}
         self._bus = bus
+        self.root_object = DBusObject(self._bus, '/')
+        self.root_introspect = pybus.introspect.IntrospectInterface()
+        self.root_object.add_interface(self.root_introspect)
+        self.register_object(self.root_object)
 
     def register_object(self, obj: DBusObject):
         self._objects[obj.path] = obj
+        self.root_introspect.child_objects.append(obj.path)
 
     async def send_return_async(self, method_call: pybus.message.Message, ret: pybus.types.enforce_type):
         try:

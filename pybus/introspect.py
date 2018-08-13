@@ -6,6 +6,10 @@ from pybus.pybus_struct import split_signature
 class IntrospectInterface(DBusInterface):
     name = 'org.freedesktop.DBus.Introspectable'
 
+    def __init__(self):
+        super().__init__()
+        self.child_objects = []
+
     @dbus_method('', 's')
     def Introspect(self, obj):
         assert isinstance(obj, DBusObject)
@@ -38,4 +42,6 @@ class IntrospectInterface(DBusInterface):
                     signal_node.append(arg_node)
                 iface_node.append(signal_node)
             root.append(iface_node)
+        for i in self.child_objects:
+            root.append(etree.Element('node', name=i))
         return etree.tostring(root, pretty_print=True),
