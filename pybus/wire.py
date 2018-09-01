@@ -42,9 +42,9 @@ class WireConnection:
             return True
         return False
 
-    async def _do_auth_external(self):
-        logger.warning("Attempting external auth")
-        self.writer.write(b"AUTH EXTERNAL %s\r\n" % binascii.hexlify(os.environ['USER'].encode()))
+    async def _do_auth_external(self, user_id: bytes):
+        logger.warning("Attempting external auth (user %r)",  user_id.decode())
+        self.writer.write(b"AUTH EXTERNAL %s\r\n" % binascii.hexlify(user_id))
         return await self._check_auth_result()
 
     async def _do_auth_anonymous(self):
@@ -98,7 +98,9 @@ class WireConnection:
             pass
         elif await self._do_auth_cookie():
             pass
-        elif await self._do_auth_external():
+        elif await self._do_auth_external(b'%d' % os.getuid()):
+            pass
+        elif await self._do_auth_external(os.environ['USER'].encode()):
             pass
         elif await self._do_auth_anonymous():
             pass
