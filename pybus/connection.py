@@ -213,17 +213,17 @@ class ClientConnection:
         return self._freedesktop_interface
 
 
-class ManagedConnection:
+class ManagedConnection(ClientConnection):
     def __init__(self, uri):
-        self._connection = ClientConnection(uri=uri)
-        self._sub_mgr = pybus.subscription.SubscriptionManager(self._connection)
-        self._connection.process_signal = self._sub_mgr.handle_message
+        super().__init__(uri=uri)
+        self._sub_mgr = pybus.subscription.SubscriptionManager(self)
+        self._obj_mgr = pybus.objects.ObjectManager(self)
 
-        self._obj_mgr = pybus.objects.ObjectManager(self._connection)
-        self._connection.process_method_call = self._obj_mgr.handle_call
+    def process_signal(self, msg):
+        return self._sub_mgr.handle_message(msg)
 
-    async def connect(self):
-        await self._connection.connect()
+    def process_method_call(self, msg):
+        return self._obj_mgr.handle_call(msg)
 
     @property
     def sub_mgr(self):

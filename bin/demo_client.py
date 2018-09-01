@@ -26,16 +26,16 @@ async def try_dbus():
     # Here I will use "private" field c._connection for simplicity,
     # but if you need you can create an instance of ClientConnection yourself
     # Method calls, low-level way:
-    machine_id = await c._connection.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'GetId', '', None)
+    machine_id = await c.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'GetId', '', None)
     logging.warning("GetMachineId result: %s", machine_id)
 
     # Introspection
-    int_result = await c._connection.introspect('org.freedesktop.DBus', '/org/freedesktop/DBus')
+    int_result = await c.introspect('org.freedesktop.DBus', '/org/freedesktop/DBus')
     logging.warning("Introspection results for org.freedesktop.DBus:")
     int_result.log(logging)
 
     # Getting an object interface for more convenient calls
-    freedesktop_dbus_if = await c._connection.get_object_interface('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus')
+    freedesktop_dbus_if = await c.get_object_interface('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus')
 
     # and using it to make some calls
     all_names = await freedesktop_dbus_if.ListNames()
@@ -110,7 +110,7 @@ async def try_dbus():
     om.register_object(obj)
 
     # Now, let's call a method and see what happens
-    remote_if = await c._connection.get_object_interface('space.equi.pybustest_bus', '/test/path', 'space.equi.pybustest')
+    remote_if = await c.get_object_interface('space.equi.pybustest_bus', '/test/path', 'space.equi.pybustest')
     ret = await remote_if.Test(4200)
     logger.warning("Response: %d", ret[0])
     ret = await remote_if.TestAsync(424200)
