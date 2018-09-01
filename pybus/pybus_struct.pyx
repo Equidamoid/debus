@@ -9,7 +9,7 @@ logger.setLevel(logging.ERROR)
 cdef int parser_logging = 0
 
 # Can't do constants in cython :(
-cdef char dbus_char = 'y'
+cdef char dbus_char = 'y'   # a.k.a. uint8
 cdef char dbus_bool = 'b'
 cdef char dbus_int16 = 'n'
 cdef char dbus_uint16 = 'q'
@@ -226,7 +226,7 @@ cdef class InputBuffer:
             raw_data = <char*>primitive_data
             i = -1
             if signature == dbus_char:
-                i = (<stdint.int8_t*>raw_data)[0]
+                i = int((<stdint.uint8_t*>raw_data)[0])
             elif signature == dbus_bool:
                 i = int((<stdint.uint32_t*>raw_data)[0])
                 assert i in [0,1]
@@ -244,7 +244,7 @@ cdef class InputBuffer:
             elif signature == dbus_uint64:
                 i = int((<stdint.uint64_t*>raw_data)[0])
             elif signature == dbus_double:
-                i = int((<double*>raw_data)[0])
+                i = float((<double*>raw_data)[0])
             else:
                 raise ValueError("Primitive signature not supported: %s" % signature)
             self.log.warning('Reading primitive %s (size %d): %r -> %s %s', chr(signature), primitive_size, binascii.hexlify(
@@ -454,15 +454,14 @@ cdef class OutputBuffer:
                     if dtype == dbus_bool:
                         arg = 1 if arg else 0
                         self.serialize_primitive[stdint.uint32_t](arg)
-                    elif dtype == 'y': self.serialize_primitive[stdint.uint8_t](arg)
-                    # elif dtype == b'b': serialize_primitive[stdint.uint32_t](arg, t_size)
-                    elif dtype == 'n': self.serialize_primitive[stdint.int16_t](arg)
-                    elif dtype == 'q': self.serialize_primitive[stdint.uint16_t](arg)
-                    elif dtype == 'i': self.serialize_primitive[stdint.int32_t](arg)
-                    elif dtype == 'u': self.serialize_primitive[stdint.uint32_t](arg)
-                    elif dtype == 'x': self.serialize_primitive[stdint.int64_t](arg)
-                    elif dtype == 't': self.serialize_primitive[stdint.uint64_t](arg)
-                    elif dtype == 'd': self.serialize_primitive[double](arg)
+                    elif dtype == dbus_char: self.serialize_primitive[stdint.uint8_t](arg)
+                    elif dtype == dbus_int16: self.serialize_primitive[stdint.int16_t](arg)
+                    elif dtype == dbus_uint16: self.serialize_primitive[stdint.uint16_t](arg)
+                    elif dtype == dbus_int32: self.serialize_primitive[stdint.int32_t](arg)
+                    elif dtype == dbus_uint32: self.serialize_primitive[stdint.uint32_t](arg)
+                    elif dtype == dbus_int64: self.serialize_primitive[stdint.int64_t](arg)
+                    elif dtype == dbus_uint64: self.serialize_primitive[stdint.uint64_t](arg)
+                    elif dtype == dbus_double: self.serialize_primitive[double](arg)
                     else:
                         raise NotImplementedError("Unknown primitive signature %s", dtype)
                 except TypeError:
