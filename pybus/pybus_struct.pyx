@@ -130,7 +130,11 @@ cdef class InputBuffer:
             self.current_message.message_type = message.MessageType(message_type)
             self.current_message.flags = flags
             for k, v in fields:
-                self.current_message.headers[message.HeaderField(k)] = v
+                # Skip unknown header fields
+                try:
+                    self.current_message.headers[message.HeaderField(k)] = v
+                except ValueError:
+                    pass
 
             self.align(8)
             if body_length:
