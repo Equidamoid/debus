@@ -7,18 +7,11 @@ import pybus
 import pybus.objects
 import pybus.freedesktop.introspect
 
-if sys.platform.startswith('darwin'):
-    systembus = 'unix:path=/opt/local/var/run/dbus/system_bus_socket'
-    sessionbus = 'unix:path=%s' % (os.environ['DBUS_LAUNCHD_SESSION_BUS_SOCKET'], )
-elif sys.platform.startswith('linux'):
-    systembus = 'unix:path=/var/run/dbus/system_bus_socket'
-    sessionbus = os.environ['DBUS_SESSION_BUS_SOCKET']
-
 logger = logging.getLogger(__name__)
 
 async def try_dbus():
     # Let's connect to a bus first
-    c = pybus.ManagedConnection(uri=sessionbus)
+    c = pybus.ManagedConnection(uri=pybus.SESSION)
     # c = pybus.connection.ClientConnection(('192.168.1.13', 33333))
     await c.connect()
 
