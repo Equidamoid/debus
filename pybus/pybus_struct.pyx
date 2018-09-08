@@ -269,13 +269,13 @@ cdef class InputBuffer:
                 return self.pop_variant()
             elif datatype == dbus_string:
                 assert len(signature) == 1
-                return self.pop_string()
+                return self.pop_string().decode('utf-8')
             elif datatype == dbus_path:
                 assert len(signature) == 1
                 return types.ObjectPath(self.pop_string())
             elif datatype == dbus_signature:
                 assert len(signature) == 1
-                return self.pop_signature()
+                return types.Signature(self.pop_signature())
             elif datatype in primitives:
                 assert len(signature) == 1
                 return self.pop_primitive(datatype)
@@ -298,7 +298,7 @@ cdef class InputBuffer:
             data = self.pop(4, 4)
             return (<stdint.int32_t*><char*>data)[0]
 
-    cpdef pop_array(InputBuffer self, signature):
+    cpdef list pop_array(InputBuffer self, signature):
         cdef int array_len = self.pop_int32()
         cdef int expected_end_offset
         with self.log:
@@ -315,7 +315,7 @@ cdef class InputBuffer:
             return ret
         # assert buffer.offset == expected_end_offset
 
-    cpdef pop_string(InputBuffer self):
+    cdef pop_string(InputBuffer self):
         # self.log.warning(buf)
         cdef int str_l
         cdef bytes data
@@ -334,7 +334,7 @@ cdef class InputBuffer:
             self.log.warning("Popped string %s", data)
             return data
 
-    cpdef pop_signature(InputBuffer self):
+    cdef bytes pop_signature(InputBuffer self):
         cdef int l
         cdef bytes data
         with self.log:
@@ -343,12 +343,13 @@ cdef class InputBuffer:
             data = self.pop(l, 1)
             self.pop(1, 1)
             self.log.warning("Popped signature %s", data)
-            return types.Signature(data)
+            return data
 
-    cpdef pop_variant(InputBuffer self):
+    cdef pop_variant(InputBuffer self):
         with self.log:
             self.log.warning("Popping variant from %s", self)
             sgn = self.pop_signature()
+            sgn_b = bytes(sgn)
             assert len(split_signature(sgn)) == 1, "Variant 'will have the signature of a single complete type'"
             self.log.warning("Variant signature %s", sgn)
             res = self.pop_single(sgn)
@@ -420,7 +421,7 @@ cdef class OutputBuffer:
         data = bytes((<char*>&(payload_len))[:4])
         self.buffer[length_offset: length_offset + 4] = data
 
-    cdef void put_single(OutputBuffer self, signature, arg) except *:
+    cdef void put_single(OutputBuffer self, bytes signature, arg) except *:
         cdef char dtype = signature[0]
         cdef int t_size = 0
         with self.log:
@@ -433,19 +434,27 @@ cdef class OutputBuffer:
             elif dtype == dbus_array:
                 self.put_array(signature[1:], arg)
             elif dtype == dbus_string:
+
                 if isinstance(arg, str):
-                    arg = arg.encode()
+                    arg = arg.encode('utf-8')
                 self.put_string(arg)
             elif dtype == dbus_path:
-                arg_b = bytes(arg)
-                assert_valid_path(arg_b)
-                self.put_string(arg_b)
+                if isinstance(arg, str):
+                    # From dbus spec:
+                    # > Each element must only contain the ASCII characters "[A-Z][a-z][0-9]_"
+                    arg = arg.encode('ascii')
+                else:
+                    arg = bytes(arg)
+                assert_valid_path(arg)
+                self.put_string(arg)
             elif dtype == dbus_signature:
-                # Try to parse the argument as a signature to check if it is valid
+                if isinstance(arg, str):
+                    arg = arg.encode('ascii')
+                else:
+                    arg = bytes(arg)
                 split_signature(arg)
                 self.put_signature(arg)
             elif dtype == dbus_variant:
-                # Oh man, variants... here come some chants
                 if isinstance(arg, types.enforce_type):
                     variant_sign, arg = arg._signature, arg._value
                 else:
@@ -476,6 +485,8 @@ cdef class OutputBuffer:
 
     cdef put_multiple(OutputBuffer self, signature, args):
         # FIXME real dict entry handling
+        if isinstance(signature, str):
+            signature = signature.encode(ascii)
         signature = signature.replace(b'{', b'(').replace(b'}', b')')
 
         with self.log:
@@ -580,13 +591,13 @@ cdef int get_structure_length(signature, int offset) except *:
         raise ValueError("Invalid signature %s: one or more ')' missing", signature)
     return current_idx - offset
 
-cdef int get_array_length(signature, int offset) except *:
+cdef int get_array_length(signature: bytes, int offset) except *:
     assert signature[offset] == ord('a')
     cdef int pl_len = get_next_item_length(signature, offset + 1)
     return pl_len + 1
 
 
-cdef int get_next_item_length(signature, int offset) except *:
+cdef int get_next_item_length(bytes signature, int offset) except *:
     cdef char ch = signature[offset]
     if ch == ord('('):
         return get_structure_length(signature, offset)
@@ -597,7 +608,7 @@ cdef int get_next_item_length(signature, int offset) except *:
     else:
         return 1
 
-cpdef split_signature(signature):
+cpdef list split_signature(bytes signature):
     cdef int sign_len = len(signature)
     cdef int sign_idx = 0
     cdef list ret = []
@@ -609,7 +620,7 @@ cpdef split_signature(signature):
         sign_idx += l
     return ret
 
-cpdef assert_valid_path(bytes path):
+cpdef void assert_valid_path(bytes path) except *:
     if path[0] != ord(b'/'):
         raise ValueError("Object path does not start with '/': %r (%d)" % (path, path[0]))
     # TODO check for '[A-Z][a-z][0-9]_'

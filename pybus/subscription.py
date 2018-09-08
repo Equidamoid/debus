@@ -35,10 +35,10 @@ class MatchRule:
     def match(self, msg: Message):
         return \
             _equals_or_none(self.msg_type, msg.message_type.name.lower()) and \
-            _equals_or_none(self.sender, msg.headers[HeaderField.SENDER].decode()) and \
-            _equals_or_none(self.interface, msg.headers[HeaderField.INTERFACE].decode()) and \
-            _equals_or_none(self.member, msg.headers[HeaderField.MEMBER].decode()) and \
-            _equals_or_none(self.path, msg.headers[HeaderField.PATH].decode())
+            _equals_or_none(self.sender, msg.headers[HeaderField.SENDER]) and \
+            _equals_or_none(self.interface, msg.headers[HeaderField.INTERFACE]) and \
+            _equals_or_none(self.member, msg.headers[HeaderField.MEMBER]) and \
+            _equals_or_none(self.path, msg.headers[HeaderField.PATH])
 
     def __hash__(self):
         return self.rule_str.__hash__()

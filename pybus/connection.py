@@ -66,7 +66,7 @@ class IntrospectedObject:
         self.bus_name = bus_name
         self.object_path = object_path
         self.interfaces = {}    # type: typing.Dict[str, IntrospectedInterface]
-        tree = etree.parse(io.BytesIO(introspect_result))
+        tree = etree.parse(io.StringIO(introspect_result))
         for interface_node in tree.xpath('/node/interface'):
             interface = IntrospectedInterface(interface_node.get('name'))
             self.interfaces[interface.name] = interface
@@ -100,7 +100,7 @@ async def get_freedesktop_interface(conn, name=None):
         name = 'org.freedesktop.DBus.%s' % name
     else:
         name = 'org.freedesktop.DBus'
-    return await conn.get_object_interface('org.freedesktop.DBus', b'/org/freedesktop/DBus', name)
+    return await conn.get_object_interface('org.freedesktop.DBus', '/org/freedesktop/DBus', name)
 
 
 class ClientConnection:
@@ -120,28 +120,30 @@ class ClientConnection:
             msgs = await self._wire.recv()
             for msg in msgs:
                 try:
-                    mt = msg.message_type
-                    if mt in [MessageType.METHOD_RETURN, MessageType.ERROR]:
-                        reply_to = msg.reply_serial
-                        if reply_to in self._futures:
-                            logger.info("Got response to %d", reply_to)
-                            f = self._futures.pop(reply_to)  # type: asyncio.Future
-                            if mt == MessageType.METHOD_RETURN:
-                                f.set_result(msg.payload)
-                            else:
-                                f.set_exception(DBusError(msg.payload))
-                            continue
-                        else:
-                            logging.warning("Received unexpected response message: %s", msg)
-                    elif mt == MessageType.SIGNAL:
-                        self.process_signal(msg)
-                    elif mt == MessageType.METHOD_CALL:
-                        self.process_method_call(msg)
-                    else:
-                        logger.error("Don't know what to do with this: %s", msg)
-
+                    self.process_message(msg)
                 except:
                     logger.exception("Failed to process message %s", msg)
+
+    def process_message(self, msg: Message):
+        mt = msg.message_type
+        if mt in [MessageType.METHOD_RETURN, MessageType.ERROR]:
+            reply_to = msg.reply_serial
+            if reply_to in self._futures:
+                logger.info("Got response to %d", reply_to)
+                f = self._futures.pop(reply_to)  # type: asyncio.Future
+                if mt == MessageType.METHOD_RETURN:
+                    f.set_result(msg.payload)
+                else:
+                    f.set_exception(DBusError(msg.payload))
+                return
+            else:
+                logging.warning("Received unexpected response message: %s", msg)
+        elif mt == MessageType.SIGNAL:
+            self.process_signal(msg)
+        elif mt == MessageType.METHOD_CALL:
+            self.process_method_call(msg)
+        else:
+            logger.error("Don't know what to do with this: %s", msg)
 
     def process_signal(self, msg):
         logger.error("Received a signal: %s", msg)
@@ -152,21 +154,12 @@ class ClientConnection:
         err.message_type = MessageType.ERROR
         err.headers[HeaderField.DESTINATION] = msg.headers[HeaderField.SENDER]
         err.headers[HeaderField.REPLY_SERIAL] = pybus.types.enforce_type(msg.serial, b'u')
-        err.headers[HeaderField.ERROR_NAME] = b'space.equi.pybus.Error.NotImplemented'
+        err.headers[HeaderField.ERROR_NAME] = 'space.equi.pybus.Error.NotImplemented'
         self.send_message(err)
 
     def call(self, bus_name, object_path, interface_name, method, signature=None, args=None, timeout=None):
-        # type: (StringOrBytes, StringOrBytes, StringOrBytes, StringOrBytes, StringOrBytes, typing.Any, float) -> typing.Any
-        if isinstance(bus_name, str):
-            bus_name = bus_name.encode()
-        if isinstance(interface_name, str):
-            interface_name = interface_name.encode()
-        if isinstance(method, str):
-            method = method.encode()
-        if isinstance(signature, str):
-            signature = signature.encode()
-        if isinstance(object_path, str):
-            object_path = object_path.encode()
+        # type: (str, str, str, str, str, typing.Any, float) -> typing.Any
+
         msg = make_mesage(MessageType.METHOD_CALL, bus_name, interface_name, method, object_path, signature, args)
         f = asyncio.Future()
         self._futures[msg.serial] = f

@@ -144,16 +144,16 @@ class ObjectManager:
         self._bus.send_message(ret_msg)
 
     def handle_call(self, msg: pybus.message.Message):
-        ret = None
         try:
-            if msg.path in self._objects:
-                ret = self._objects[msg.path].on_method_call(msg)      # type: pybus.types.enforce_type
+            path = str(msg.path)
+            if path in self._objects:
+                ret = self._objects[path].on_method_call(msg)      # type: pybus.types.enforce_type
                 if isinstance(ret.value, asyncio.Future) or inspect.iscoroutine(ret.value):
                     asyncio.ensure_future(self.send_return_async(msg, ret))
                 else:
                     self.send_return(msg, ret)
             else:
-                raise NotImplementedError("Unknown path: %s, possible paths: %s" % (msg.path, sorted(self._objects.keys())))
+                raise NotImplementedError("Unknown path: %s, possible paths: %r" % (path, sorted(self._objects.keys())))
         except Exception as ex:
             logging.exception('')
             self.send_error(msg, ex)

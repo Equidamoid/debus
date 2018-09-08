@@ -32,16 +32,12 @@ def next_serial():
 def _str_field_property(field: HeaderField, cast_to=None):
     def getter(msg):
         ret = msg.headers.get(field, None)
-        if isinstance(ret, bytes):
-            ret = ret.decode()
         return ret
 
     def setter(msg, value):
         if value is None:
             deleter(msg)
         else:
-            if isinstance(value, str):
-                value = value.encode()
             if cast_to:
                 value = cast_to(value)
             msg.headers[field] = value
@@ -93,11 +89,11 @@ class Message:
 
 
 def make_mesage(m_type: MessageType,
-                bus_name: bytes,
-                interface_name: bytes,
-                member: bytes,
-                object_path: bytes,
-                signature: bytes=None,
+                bus_name: str,
+                interface_name: str,
+                member: str,
+                object_path: str,
+                signature: str=None,
                 data=None) -> Message:
     ret = Message()
     ret.message_type = m_type

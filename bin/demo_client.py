@@ -49,8 +49,8 @@ async def try_dbus():
         except pybus.DBusError as ex:
             # DBus errors result in a python exception coming from a future
             pid = None
-            logging.warning("No data for %s: %s", i.decode(), ex.args)
-        logging.warning("pid of '%s' is %s", i.decode(), pid)
+            logging.warning("No data for %s: %s", i, ex.args)
+        logging.warning("pid of '%s' is %s", i, pid)
 
     # Signals!
     # get a subscription manager

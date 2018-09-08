@@ -8,10 +8,25 @@ class DBusType:
 class Signature(bytes, DBusType):
     signature = b'g'
 
+    def __new__(cls, arg):
+        if isinstance(arg, str):
+            arg = arg.encode('utf-8')
+        return super().__new__(cls, arg)
+
+    __str__ = bytes.decode
+
 
 class ObjectPath(bytes, DBusType):
     signature = b'o'
 
+    def __new__(cls, arg):
+        if isinstance(arg, str):
+            arg = arg.encode('utf-8')
+        if arg[0] != ord(b'/') or b'//' in arg:
+            raise ValueError("Invalid object path: %s" % arg)
+        return super().__new__(cls, arg)
+
+    __str__ = bytes.decode
 
 class enforce_type:
     """
@@ -44,6 +59,8 @@ def guess_signature(arg):
         ret = b'd'
     elif isinstance(arg, Path):
         ret = b'o'
+    elif isinstance(arg, str):
+        ret = b's'
     elif isinstance(arg, bytes):
         ret = b's'
     elif isinstance(arg, list):
