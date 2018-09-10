@@ -118,7 +118,7 @@ class WireConnection:
             msgs = self.parser.feed_data(data)
         return msgs
 
-    async def send(self, message: 'pybus.Message'):
+    def send(self, message: 'pybus.Message'):
         buf = OutputBuffer()
         try:
             buf.put_message(message)

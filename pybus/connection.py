@@ -187,7 +187,7 @@ class ClientConnection:
         self.send_message(msg)
 
     def send_message(self, msg: Message):
-        asyncio.ensure_future(self._wire.send(msg))
+        self._wire.send(msg)
 
     async def introspect(self, bus_name, object_path):
         logger.info("Introspecting %s %s", bus_name, object_path)
