@@ -492,7 +492,7 @@ cdef class OutputBuffer:
         with self.log:
             parts = split_signature(signature)
             if len(parts) != len(args):
-                raise ValueError("Args length doesn't match signature length: %d vs %d" % (len(parts), len(args)))
+                raise ValueError("Arguments (%r) don't match signature (%r)" % (args, parts))
 
             for sgn_item, data_item in zip(parts, args):
                 try:
