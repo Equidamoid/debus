@@ -74,22 +74,22 @@ async def try_dbus():
         name = 'space.equi.pybustest'
 
         @pybus.objects.dbus_method('i', 'i')
-        def Test(self, obj, i):
+        def Test(self, i):
             logging.info("Adding 42 to %d", i)
-            self.TestReceived(obj, i)
+            self.TestReceived(i)
             # DBus can have multiple "out arguments", so here we return a tuple of one
             return i + 42,
 
         # You can also expose coroutines
         @pybus.objects.dbus_method('i', 'i')
-        async def TestAsync(self, obj, i):
+        async def TestAsync(self, i):
             logging.info("Adding 42 to %d asyncronously", i)
             await asyncio.sleep(2)
-            self.TestReceived(obj, i)
+            self.TestReceived(i)
             return i + 42,
 
         @pybus.objects.dbus_signal('i')
-        def TestReceived(self, obj, i):
+        def TestReceived(self, i):
             pass
 
     # Create an object

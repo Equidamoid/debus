@@ -1,59 +1,86 @@
-import functools
 import inspect
 from pybus.message import Message
 import pybus.pybus_struct
 import pybus.types
 import logging
 import asyncio
+import typing
 
 logger = logging.getLogger(__name__)
+
+class MethodInfo:
+    def __init__(self, name, in_signature, out_signature, single_return):
+        self.name: str = name
+        self.in_signature: str = in_signature
+        self.out_signature: str = out_signature
+        self.single_return: bool = single_return
+
+class SignalInfo:
+    def __init__(self, name, arg_names, signature):
+        self.name: str = name
+        self.argument_names: typing.List[str] = arg_names
+        self.signature: str = signature
+
+class PropertyInfo:
+    def __init__(self, name, readonly):
+        self.name: str = name
+        self.readonly: bool = readonly
 
 def dbus_method(signature: str, return_signature: str, name: str=None, single_return_value=True):
     def dec(foo):
         method_name = name or foo.__name__
-        foo._pybus_method_name = method_name
-        foo._pybus_method_signature = signature
-        foo._pybus_method_return_signature = return_signature
-        foo._pybus_method_single_return = single_return_value
+        foo._pybus_method = MethodInfo(method_name, signature, return_signature, single_return_value)
         return foo
     return dec
 
 
-def dbus_signal(signature: str, name:str=None):
+def dbus_signal(signature: str, name:str=None, arg_names:list=None):
     def dec(foo):
         method_name = name or foo.__name__
-
-        def _signal_wrapper(_self, obj, *args):
+        _arg_names = arg_names
+        if _arg_names is None:
+            _arg_names = list(list(inspect.signature(foo).parameters)[1:])
+        def _signal_wrapper(_self, *args):
             assert isinstance(_self, DBusInterface)
-            assert isinstance(obj, DBusObject)
-            obj._bus.emit(obj.path, _self.name, method_name, signature, args)
-
-        _signal_wrapper._pybus_signal_name = method_name
-        _signal_wrapper._pybus_signal_signature = signature
+            _self._obj._bus.emit(_self._obj.path, _self.name, method_name, signature, args)
+        _signal_wrapper._pybus_signal = SignalInfo(method_name, _arg_names, signature)
         return _signal_wrapper
     return dec
 
+
+def dbus_property(signature: str, name:str=None):
+    def dec(prop):
+        prop._pybus_property = PropertyInfo(name, hasattr(prop, 'fset'))
+        return prop
+    return dec
 
 class DBusInterface:
     name = None
 
     def __init__(self):
         self._dbus_methods = {}
+        self._dbus_properties = {}
         self._dbus_signals = []
-        for i in inspect.getmembers(self.__class__, lambda x: hasattr(x, '_pybus_method_name')):
-            self._dbus_methods[i[1]._pybus_method_name] = i[1]
-        pass
-        for i in inspect.getmembers(self.__class__, lambda x: hasattr(x, '_pybus_signal_name')):
+        self._obj: 'DBusObject' = None
+        for name, m in inspect.getmembers(self.__class__, lambda x: hasattr(x, '_pybus_method')):
+            self._dbus_methods[m._pybus_method.name] = m
+        for name, p in inspect.getmembers(self.__class__, lambda x: hasattr(x, '_pybus_property')):
+            # properties don't know their names
+            p._pybus_property.name = p._pybus_property.name or name
+            self._dbus_properties[p._pybus_property.name] = p
+        for i in inspect.getmembers(self.__class__, lambda x: hasattr(x, '_pybus_signal')):
             self._dbus_signals.append(i[1])
+    def set_object(self, obj: 'DBusObject'):
+        self._obj = obj
 
-    def on_method_call(self, obj, msg: Message):
+    def on_method_call(self, msg: Message):
         if msg.member in self._dbus_methods:
             method = self._dbus_methods[msg.member]
-            sig = method._pybus_method_return_signature
+            spec: MethodInfo = method._pybus_method
             args = [] if msg.payload is None else msg.payload
-            ret = method(self, obj, *args)
-            return pybus.types.enforce_type(ret, sig.encode())
-        raise NotImplementedError('Unknown method %s, existing methods: %s' % (msg.member, self._dbus_methods.keys()))
+            ret = method(self, *args)
+            return pybus.types.enforce_type(ret, spec.out_signature.encode())
+        raise NotImplementedError('Unknown method (%s.)%s, existing methods: %s' % (self.name, msg.member, self._dbus_methods.keys()))
 
     @property
     def methods(self):
@@ -62,6 +89,10 @@ class DBusInterface:
     @property
     def signals(self):
         return list(self._dbus_signals)
+
+    @property
+    def properties(self):
+        return list(self._dbus_properties)
 
 
 class DBusObject:
@@ -83,13 +114,14 @@ class DBusObject:
         # type: ()->list[DBusInterface]
         return list(self._interfaces.values())
 
-    def add_interface(self, iface):
+    def add_interface(self, iface: DBusInterface):
         self._interfaces[iface.name] = iface
+        iface.set_object(self)
 
     def on_method_call(self, msg: Message):
         if msg.interface in self._interfaces:
-            return self._interfaces[msg.interface].on_method_call(self, msg)
-        raise NotImplementedError()
+            return self._interfaces[msg.interface].on_method_call(msg)
+        raise NotImplementedError("Interface %r is not supported by object %r" % (msg.interface, self.path))
 
 
 class ObjectManager:
@@ -155,7 +187,7 @@ class ObjectManager:
             else:
                 raise NotImplementedError("Unknown path: %s, possible paths: %r" % (path, sorted(self._objects.keys())))
         except Exception as ex:
-            logging.exception('')
+            logging.exception('Failed to process message %s', msg)
             self.send_error(msg, ex)
             pass
 
