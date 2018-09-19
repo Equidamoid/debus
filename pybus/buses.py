@@ -6,4 +6,4 @@ if sys.platform.startswith('darwin'):
     SESSION = 'unix:path=%s' % (os.environ['DBUS_LAUNCHD_SESSION_BUS_SOCKET'],)
 elif sys.platform.startswith('linux'):
     SYSTEM = 'unix:path=/var/run/dbus/system_bus_socket'
-    SESSION = os.environ['DBUS_SESSION_BUS_SOCKET']
+    SESSION = os.environ.get('DBUS_SESSION_BUS_SOCKET', None)
