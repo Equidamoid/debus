@@ -15,7 +15,7 @@ class DeannotateAndBuild(setuptools.command.build_py.build_py):
                 sed_i = 'sed -i""'
             else:
                 sed_i = 'sed -i'
-            os.system(r'''set -x; cd %s; find . -name '*.py' | xargs -n1 %s '' 's@^\( *[a-zA-Z._]*\):.*=@\1 = @g' ''' % (self.build_lib, sed_i))
+            os.system(r'''set -x; cd %s; find . -name '*.py' | xargs -n1 %s 's@^\( *[a-zA-Z._]*\):.*=@\1 = @g' ''' % (self.build_lib, sed_i))
 
 
 setuptools.setup(
