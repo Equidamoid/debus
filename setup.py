@@ -11,7 +11,11 @@ class DeannotateAndBuild(setuptools.command.build_py.build_py):
         super().build_packages()
         if sys.version_info[0] == 3 and sys.version_info [1] < 6:
             print("Installing for older python, trying to clean up annotations...", file=sys.stderr)
-            os.system(r'''set -x; cd %s; find . -name '*.py' | xargs -n1 sed -i '' 's@^\( *[a-zA-Z._]*\):.*=@\1 = @g' ''' % self.build_lib)
+            if sys.platform.startswith('darwin'):
+                sed_i = 'sed -i""'
+            else:
+                sed_i = 'sed -i'
+            os.system(r'''set -x; cd %s; find . -name '*.py' | xargs -n1 %s '' 's@^\( *[a-zA-Z._]*\):.*=@\1 = @g' ''' % (self.build_lib, sed_i))
 
 
 setuptools.setup(
