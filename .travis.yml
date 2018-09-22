@@ -11,7 +11,7 @@ script:
  - export DBUS_SESSION_BUS_SOCKET=unix:path=./dbus-sock
  - dbus-daemon --session --address $DBUS_SESSION_BUS_SOCKET --fork
  - python3 ./debus/bin/demo_client.py
- deploy:
+deploy:
   provider: pypi
   user: equi
   distributions: sdist bdist_wheel
