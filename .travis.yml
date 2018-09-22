@@ -10,4 +10,4 @@ script:
  - cd ..; python3 -c "import debus"
  - export DBUS_SESSION_BUS_SOCKET=unix:path=./dbus-sock
  - dbus-daemon --session --address $DBUS_SESSION_BUS_SOCKET --fork
- - python3 ./debus/bin/demo_client.py
+ - python3 ./pybus/bin/demo_client.py
