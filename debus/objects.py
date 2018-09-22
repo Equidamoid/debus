@@ -1,7 +1,7 @@
 import inspect
-from pybus.message import Message
-import pybus.pybus_struct
-import pybus.types
+from debus.message import Message
+import debus.pybus_struct
+import debus.types
 import logging
 import asyncio
 import typing
@@ -79,7 +79,7 @@ class DBusInterface:
             spec: MethodInfo = method._pybus_method
             args = [] if msg.payload is None else msg.payload
             ret = method(self, *args)
-            return pybus.types.enforce_type(ret, spec.out_signature.encode())
+            return debus.types.enforce_type(ret, spec.out_signature.encode())
         raise NotImplementedError('Unknown method (%s.)%s, existing methods: %s' % (self.name, msg.member, self._dbus_methods.keys()))
 
     @property
@@ -97,9 +97,9 @@ class DBusInterface:
 
 class DBusObject:
     def __init__(self, conn, path):
-        # type: (pybus.ManagedConnection)->None
+        # type: (debus.ManagedConnection)->None
         self._interfaces = {}
-        if isinstance(conn, pybus.ClientConnection):
+        if isinstance(conn, debus.ClientConnection):
             self._bus = conn
         else:
             self._bus = conn._connection
@@ -126,13 +126,13 @@ class DBusObject:
 
 class ObjectManager:
     def __init__(self, bus):
-        # type: (pybus.ClientConnection)->None
+        # type: (debus.ClientConnection)->None
         # FIXME cyclic dependency :-/
-        import pybus.freedesktop.introspect
+        import debus.freedesktop.introspect
         self._objects = {}
         self._bus = bus
         self.root_object = DBusObject(self._bus, '/')
-        self.root_introspect = pybus.freedesktop.introspect.IntrospectInterface()
+        self.root_introspect = debus.freedesktop.introspect.IntrospectInterface()
         self.root_object.add_interface(self.root_introspect)
         self.register_object(self.root_object)
 
@@ -140,7 +140,7 @@ class ObjectManager:
         self._objects[obj.path] = obj
         self.root_introspect.child_objects.append(obj.path)
 
-    async def send_return_async(self, method_call: pybus.message.Message, ret: pybus.types.enforce_type):
+    async def send_return_async(self, method_call: debus.message.Message, ret: debus.types.enforce_type):
         try:
             ret._value = await ret.value
             self.send_return(method_call, ret)
@@ -148,26 +148,26 @@ class ObjectManager:
             logger.exception("Exception during method call %s", method_call)
             self.send_error(method_call, ex)
 
-    def send_error(self, method_call: pybus.message.Message, exc: Exception):
-        err = pybus.Message()
-        err.message_type = pybus.MessageType.ERROR
+    def send_error(self, method_call: debus.message.Message, exc: Exception):
+        err = debus.Message()
+        err.message_type = debus.MessageType.ERROR
         err.destination = method_call.sender
-        err.error_name = 'space.equi.pybus.Error.%s' % exc.__class__.__name__
+        err.error_name = 'space.equi.debus.Error.%s' % exc.__class__.__name__
         err.reply_serial = method_call.serial
         err.signature = 's'
         err.payload = (repr(exc),)
         logger.warning("Sending an error %s as a response to %s", err, method_call)
         self._bus.send_message(err)
 
-    def send_return(self, method_call: pybus.message.Message, ret):
-        if isinstance(ret, pybus.types.enforce_type):
+    def send_return(self, method_call: debus.message.Message, ret):
+        if isinstance(ret, debus.types.enforce_type):
             signature = ret.signature
             ret = ret._value
         else:
-            signature = pybus.types.guess_signature(ret)
+            signature = debus.types.guess_signature(ret)
             logger.warning("Had to guess the signature, got %s for %r", signature, ret)
-        ret_msg = pybus.Message()
-        ret_msg.message_type = pybus.MessageType.METHOD_RETURN
+        ret_msg = debus.Message()
+        ret_msg.message_type = debus.MessageType.METHOD_RETURN
         ret_msg.destination = method_call.sender
         ret_msg.reply_serial = method_call.serial
         ret_msg.signature = signature
@@ -175,11 +175,11 @@ class ObjectManager:
         logging.warning("Sending return value %s as a response to %s", ret_msg, method_call)
         self._bus.send_message(ret_msg)
 
-    def handle_call(self, msg: pybus.message.Message):
+    def handle_call(self, msg: debus.message.Message):
         try:
             path = str(msg.path)
             if path in self._objects:
-                ret = self._objects[path].on_method_call(msg)      # type: pybus.types.enforce_type
+                ret = self._objects[path].on_method_call(msg)      # type: debus.types.enforce_type
                 if isinstance(ret.value, asyncio.Future) or inspect.iscoroutine(ret.value):
                     asyncio.ensure_future(self.send_return_async(msg, ret))
                 else:

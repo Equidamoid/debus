@@ -3,16 +3,15 @@ import logging
 import os
 import sys
 
-import pybus
-import pybus.objects
-import pybus.freedesktop.introspect
+import debus
+import debus.objects
+import debus.freedesktop.introspect
 
 logger = logging.getLogger(__name__)
 
 async def try_dbus():
     # Let's connect to a bus first
-    c = pybus.ManagedConnection(uri=pybus.SESSION)
-    # c = pybus.connection.ClientConnection(('192.168.1.13', 33333))
+    c = debus.ManagedConnection(uri=debus.SESSION)
     await c.connect()
 
     ## Low-level interface: ClientConnection class
@@ -39,7 +38,7 @@ async def try_dbus():
             # Note that the result of function call is an iterable
             # because DBus functions can have multiple "out arguments"
             pid = pid[0]
-        except pybus.DBusError as ex:
+        except debus.DBusError as ex:
             # DBus errors result in a python exception coming from a future
             pid = None
             logging.warning("No data for %s: %s", i, ex.args)
@@ -58,7 +57,7 @@ async def try_dbus():
         sm.unsubscribe(on_signal)
 
     # and subsctribe
-    sm.subscribe(pybus.MatchRule(member='NameAcquired'), on_signal)
+    sm.subscribe(debus.MatchRule(member='NameAcquired'), on_signal)
 
     # Now let's cause a signal and wait a bit
     await freedesktop_dbus_if.RequestName('space.equi.pybustest_bus', 0)
@@ -70,10 +69,10 @@ async def try_dbus():
     om = c.obj_mgr
 
     # Define an interface
-    class TestIface(pybus.objects.DBusInterface):
+    class TestIface(debus.objects.DBusInterface):
         name = 'space.equi.pybustest'
 
-        @pybus.objects.dbus_method('i', 'i')
+        @debus.objects.dbus_method('i', 'i')
         def Test(self, i):
             logging.info("Adding 42 to %d", i)
             self.TestReceived(i)
@@ -81,24 +80,24 @@ async def try_dbus():
             return i + 42,
 
         # You can also expose coroutines
-        @pybus.objects.dbus_method('i', 'i')
+        @debus.objects.dbus_method('i', 'i')
         async def TestAsync(self, i):
             logging.info("Adding 42 to %d asyncronously", i)
             await asyncio.sleep(2)
             self.TestReceived(i)
             return i + 42,
 
-        @pybus.objects.dbus_signal('i')
+        @debus.objects.dbus_signal('i')
         def TestReceived(self, i):
             pass
 
     # Create an object
-    obj = pybus.objects.DBusObject(c, '/test/path')
+    obj = debus.objects.DBusObject(c, '/test/path')
 
     # Add interface to your object
     obj.add_interface(TestIface())
     # Also add the standard Introspect interface
-    obj.add_interface(pybus.freedesktop.introspect.IntrospectInterface())
+    obj.add_interface(debus.freedesktop.introspect.IntrospectInterface())
     # register the object
     om.register_object(obj)
 

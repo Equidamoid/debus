@@ -1,6 +1,6 @@
 import functools
-from pybus.message import Message, MessageType, HeaderField
-import pybus.connection
+from debus.message import Message, MessageType, HeaderField
+import debus.connection
 
 import logging
 try:
@@ -53,11 +53,11 @@ class MatchRule:
 
 
 class SubscriptionManager:
-    def __init__(self, connection: pybus.connection.ClientConnection):
+    def __init__(self, connection: debus.connection.ClientConnection):
         self._connection = connection
         self._matches = {}              # type: typing.Dict[MatchRule, list]
 
-    def handle_message(self, m: pybus.message.Message):
+    def handle_message(self, m: debus.message.Message):
         # first build a list, then call, so user can subscribe/unsubscribe in message handler
         all_callbacks = []
         for rule, callbacks in self._matches.items():

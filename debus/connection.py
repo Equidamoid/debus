@@ -1,8 +1,8 @@
 import asyncio
 import logging
-import pybus.types
-from pybus.wire import WireConnection
-import pybus.objects
+import debus.types
+from debus.wire import WireConnection
+import debus.objects
 from .message import Message, make_mesage, MessageType, HeaderField
 from lxml import etree
 import io
@@ -95,7 +95,7 @@ class IntrospectedObject:
 
 
 async def get_freedesktop_interface(conn, name=None):
-    # type: (pybus.connection.ClientConnection, str) -> pybus.connection.DBusInterface
+    # type: (debus.connection.ClientConnection, str) -> debus.connection.DBusInterface
     if name:
         name = 'org.freedesktop.DBus.%s' % name
     else:
@@ -153,8 +153,8 @@ class ClientConnection:
         err = Message()
         err.message_type = MessageType.ERROR
         err.headers[HeaderField.DESTINATION] = msg.headers[HeaderField.SENDER]
-        err.headers[HeaderField.REPLY_SERIAL] = pybus.types.enforce_type(msg.serial, b'u')
-        err.headers[HeaderField.ERROR_NAME] = 'space.equi.pybus.Error.NotImplemented'
+        err.headers[HeaderField.REPLY_SERIAL] = debus.types.enforce_type(msg.serial, b'u')
+        err.headers[HeaderField.ERROR_NAME] = 'space.equi.debus.Error.NotImplemented'
         self.send_message(err)
 
     def call(self, bus_name, object_path, interface_name, method, signature=None, args=None, timeout=None):
@@ -209,8 +209,8 @@ class ClientConnection:
 class ManagedConnection(ClientConnection):
     def __init__(self, uri):
         super().__init__(uri=uri)
-        self._sub_mgr = pybus.subscription.SubscriptionManager(self)
-        self._obj_mgr = pybus.objects.ObjectManager(self)
+        self._sub_mgr = debus.subscription.SubscriptionManager(self)
+        self._obj_mgr = debus.objects.ObjectManager(self)
 
     def process_signal(self, msg):
         return self._sub_mgr.handle_message(msg)

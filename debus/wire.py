@@ -4,8 +4,8 @@ import hashlib
 import logging
 import os
 from pathlib import Path
-import pybus
-from pybus.pybus_struct import InputBuffer, OutputBuffer
+import debus
+from debus.pybus_struct import InputBuffer, OutputBuffer
 try:
     import typing
 except:
@@ -108,7 +108,7 @@ class WireConnection:
             logger.error("Can't authenticate with the server")
         self.writer.write(b'BEGIN\r\n')
 
-    async def recv(self) -> 'typing.List[pybus.Message]':
+    async def recv(self) -> 'typing.List[debus.Message]':
         msgs = []
         while len(msgs) == 0:
             data = await self.reader.read(1024)
@@ -118,7 +118,7 @@ class WireConnection:
             msgs = self.parser.feed_data(data)
         return msgs
 
-    def send(self, message: 'pybus.Message'):
+    def send(self, message: 'debus.Message'):
         buf = OutputBuffer()
         try:
             buf.put_message(message)
