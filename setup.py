@@ -28,7 +28,7 @@ setuptools.setup(
     author='Vladimir Shapranov',
     author_email='equidamoid@gmail.com',
     url='https://github.com/Equidamoid/debus',
-    ext_modules=cythonize("debus/pybus_struct.pyx"),
+    ext_modules=cythonize("debus/marshalling.pyx"),
     packages=setuptools.find_packages(),
     install_requires=[
         'lxml',

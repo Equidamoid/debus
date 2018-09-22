@@ -5,7 +5,7 @@ import logging
 import os
 from pathlib import Path
 import debus
-from debus.pybus_struct import InputBuffer, OutputBuffer
+from debus.marshalling import InputBuffer, OutputBuffer
 try:
     import typing
 except:

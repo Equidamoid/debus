@@ -1,6 +1,5 @@
 import inspect
 from debus.message import Message
-import debus.pybus_struct
 import debus.types
 import logging
 import asyncio

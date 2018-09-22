@@ -1,6 +1,6 @@
 from debus.objects import DBusObject, DBusInterface, dbus_method, MethodInfo, PropertyInfo, SignalInfo
 from lxml import etree
-from debus.pybus_struct import split_signature
+from debus.marshalling import split_signature
 import logging
 
 logger = logging.getLogger(__name__)
