@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/Equidamoid/debus.svg?branch=master)](https://travis-ci.org/Equidamoid/debus)
 ## debus: a non-reference DBus implementation
 
 ## Summary
