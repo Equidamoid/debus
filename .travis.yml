@@ -7,11 +7,11 @@ before_install:
  - sudo apt-get install -y dbus
 script:
  - pip3 install .
- - cd ..; python3 -c "import debus"
+ - pushd ..; python3 -c "import debus"
  - export DBUS_SESSION_BUS_SOCKET=unix:path=./dbus-sock
  - dbus-daemon --session --address $DBUS_SESSION_BUS_SOCKET --fork
  - python3 ./debus/bin/demo_client.py
- - cd ~/
+ - popd
 deploy:
   provider: pypi
   user: equi
