@@ -2,6 +2,7 @@ import setuptools
 import os
 import sys
 import setuptools.command.build_py
+from pathlib import Path
 from Cython.Build import cythonize
 
 
@@ -25,6 +26,8 @@ setuptools.setup(
     name='debus',
     version='0.1',
     description='DBus wire protocol implementation',
+    long_description=Path('README.md').read_text(),
+    long_description_content_type="text/markdown",
     author='Vladimir Shapranov',
     author_email='equidamoid@gmail.com',
     url='https://github.com/Equidamoid/debus',
@@ -32,5 +35,17 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     install_requires=[
         'lxml',
+    ],
+    classifiers=[
+        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
+        'Development Status :: 3 - Alpha',
+        'Intended Audience :: Developers',
+        'Operating System :: POSIX :: Linux',
+        'Operating System :: MacOS :: MacOS X',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+
     ]
+
 )
