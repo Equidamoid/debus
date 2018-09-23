@@ -47,7 +47,7 @@ setuptools.setup(
     author='Vladimir Shapranov',
     author_email='equidamoid@gmail.com',
     url='https://github.com/Equidamoid/debus',
-    ext_modules=maybe_cythonize([setuptools.Extension('marshalling', ["debus/marshalling.c"])]),
+    ext_modules=maybe_cythonize([setuptools.Extension('debus.marshalling', ["debus/marshalling.c"])]),
     packages=setuptools.find_packages(),
     install_requires=[
         'lxml',
