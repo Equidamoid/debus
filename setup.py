@@ -12,6 +12,8 @@ def maybe_cythonize(exts: typing.List[setuptools.Extension]):
             c = Path(i)
             pyx = Path(i.replace('.c', '.pyx'))
             if pyx.exists() and ((not c.exists()) or pyx.stat().st_mtime > c.stat().st_mtime):
+                ext.sources.remove(i)
+                ext.sources.append(str(pyx))
                 do_it = True
 
     if do_it:
