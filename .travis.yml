@@ -8,8 +8,8 @@ before_install:
 script:
  - pip3 install .
  - pushd ..; python3 -c "import debus"
- - export DBUS_SESSION_BUS_SOCKET=unix:path=./dbus-sock
- - dbus-daemon --session --address $DBUS_SESSION_BUS_SOCKET --fork
+ - export DBUS_SESSION_BUS_ADDRESS=unix:path=./dbus-sock
+ - dbus-daemon --session --address $DBUS_SESSION_BUS_ADDRESS --fork
  - python3 ./debus/bin/demo_client.py
  - popd
 deploy:
