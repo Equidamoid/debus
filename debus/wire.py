@@ -5,6 +5,7 @@ import logging
 import os
 from pathlib import Path
 import debus
+import subprocess
 from debus.marshalling import InputBuffer, OutputBuffer
 try:
     import typing
@@ -13,6 +14,48 @@ except:
 
 logger = logging.getLogger(__name__)
 
+class AbstractConnection:
+    def __init__(self):
+        self.reader: asyncio.StreamReader = None
+        self.writer: asyncio.StreamWriter = None
+
+
+class TcpConnection(AbstractConnection):
+    def __init__(self, host, port):
+        super().__init__()
+        self.host = host
+        self.port = port
+
+    async def setup(self):
+        logger.info('TCP socket connection %s:%s', self.host, self.port)
+        self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
+
+
+class UnixConnection(AbstractConnection):
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+
+    async def setup(self):
+        logger.info('Unix socket connection: %s', self.path)
+        self.reader, self.writer = await asyncio.open_unix_connection(self.path)
+
+
+class ExecConnection(AbstractConnection):
+
+    def __init__(self, cmd, args):
+        super().__init__()
+        self.cmd = cmd
+        self.args = args
+        self.process = None
+
+    async def setup(self):
+        logger.info("Unix exec connection: %s %r", self.cmd, self.args)
+        self.process = await asyncio.create_subprocess_exec(self.cmd, *self.args, stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+        self.reader = self.process.stdout
+        self.writer = self.process.stdin
+
+        pass
 
 class WireConnection:
     def __init__(self, socket=None, uri=None):
@@ -22,13 +65,30 @@ class WireConnection:
         self.parser = InputBuffer()
         self.server_guid = None     # type: bytes
         if uri:
-            kind, params = uri.split(':')
+            if '%' in uri:
+                raise NotImplementedError("Escape sequences ('%XX') in dbus address are not supported yet")
+            kind, params = uri.split(':', maxsplit=1)
             params = {k:v for k,v in [i.split('=') for i in params.split(',')]}
-            logger.warning("Uri %r parsed, have to connect via %s with parameters %s", uri, kind, params)
+            logger.info("Uri %r parsed, have to connect via %s with parameters %s", uri, kind, params)
             if kind == 'tcp':
-                socket = (params['host'], int(params['port']))
+                host, port = (params['host'], int(params['port']))
+                self._connection = TcpConnection(host, port)
             elif kind == 'unix':
                 socket = params['path']
+                logger.warning("Will connect to unix socket %r", socket)
+                self._connection = UnixConnection(socket)
+            elif kind == 'unixexec':
+                cmd = params['path']
+                arg0 = params.get('argv0', cmd)
+                args = []
+                for i in range(1, 100):
+                    key = 'argv%d' % i
+                    if key in params:
+                        args.append(params[key])
+                    else:
+                        break
+                self._connection = ExecConnection(cmd, args)
+
         self.socket_path = socket
 
     async def _check_auth_result(self):
@@ -85,10 +145,8 @@ class WireConnection:
             raise RuntimeError("Unexpected response during DBUS_COOKIE_SHA1 auth: %r", resp)
 
     async def connect_and_auth(self):
-        if isinstance(self.socket_path, str):
-            self.reader, self.writer = await asyncio.open_unix_connection(self.socket_path)
-        else:
-            self.reader, self.writer = await asyncio.open_connection(self.socket_path[0], self.socket_path[1])
+        await self._connection.setup()
+        self.reader, self.writer = self._connection.reader, self._connection.writer
         self.writer.write(b"\0")
         self.writer.write(b"AUTH\r\n")
         response = await self.reader.readline()
