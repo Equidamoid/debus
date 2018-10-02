@@ -152,9 +152,12 @@ class WireConnection:
         response = await self.reader.readline()
         auth_available = response.split()[1:]
         logger.warning("Auth types available: %s", auth_available)
+        external_id_override = os.environ.get('DEBUS_EXTERNAL_USERID', None)
         if False:
             pass
         elif await self._do_auth_cookie():
+            pass
+        elif not external_id_override is None and await self._do_auth_external(external_id_override.encode()):
             pass
         elif await self._do_auth_external(b'%d' % os.getuid()):
             pass
