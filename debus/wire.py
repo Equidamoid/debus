@@ -74,9 +74,16 @@ class WireConnection:
                 host, port = (params['host'], int(params['port']))
                 self._connection = TcpConnection(host, port)
             elif kind == 'unix':
-                socket = params['path']
-                logger.warning("Will connect to unix socket %r", socket)
-                self._connection = UnixConnection(socket)
+                socket_path = None
+                if 'path' in params:
+                    socket_path = params['path']
+                elif 'abstract' in params:
+                    socket_path = '\0' + params['abstract']
+                else:
+                    logger.error("Incorrect unix url: no 'path' or 'abstract' argument: %r", uri)
+                    raise ValueError("Incorrect 'unix' uri provided")
+                logger.warning("Will connect to unix socket %r", socket_path)
+                self._connection = UnixConnection(socket_path)
             elif kind == 'unixexec':
                 cmd = params['path']
                 arg0 = params.get('argv0', cmd)
@@ -88,8 +95,6 @@ class WireConnection:
                     else:
                         break
                 self._connection = ExecConnection(cmd, args)
-
-        self.socket_path = socket
 
     async def _check_auth_result(self):
         result = (await self.reader.readline())
