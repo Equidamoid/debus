@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import debus
 import subprocess
+import getpass
 from debus.marshalling import InputBuffer, OutputBuffer
 try:
     import typing
@@ -118,7 +119,7 @@ class WireConnection:
         return await self._check_auth_result()
 
     async def _do_auth_cookie(self):
-        self.writer.write(b"AUTH DBUS_COOKIE_SHA1 %s\r\n" % binascii.hexlify(os.environ['USER'].encode()))
+        self.writer.write(b"AUTH DBUS_COOKIE_SHA1 %s\r\n" % binascii.hexlify(getpass.getuser().encode()))
         resp = await self.reader.readline()
         resp_parts = resp.split()
         if resp_parts[0] == b'REJECTED':
