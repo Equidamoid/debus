@@ -40,7 +40,7 @@ setuptools.setup(
         'build_py': DeannotateAndBuild,
     },
     name='debus',
-    version='0.1.8',
+    version='0.1.10',
     description='DBus wire protocol implementation',
     long_description=Path('README.md').read_text(),
     long_description_content_type="text/markdown",
