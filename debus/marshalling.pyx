@@ -289,7 +289,7 @@ cdef class InputBuffer:
             ret = []
             for i in split_signature(signature):
                 ret.append(self.pop_single(i))
-            return ret
+            return tuple(ret)
 
     cpdef int pop_int32(InputBuffer self) except*:
         cdef bytes data
