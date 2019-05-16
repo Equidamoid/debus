@@ -199,10 +199,12 @@ class ClientConnection:
         return (await self.introspect(bus_name, object_path)).interfaces[interface]
 
     async def request_name(self, name: str):
-        await self._freedesktop_interface.RequestName(name, 0)
+        await self.freedesktop_interface.RequestName(name, 0)
 
     @property
     def freedesktop_interface(self):
+        if self._freedesktop_interface is None:
+            logger.error("org.freedesktop interface is not yet introspected. Did you call `await bus.connect()`?")
         return self._freedesktop_interface
 
 

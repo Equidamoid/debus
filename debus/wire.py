@@ -194,4 +194,6 @@ class WireConnection:
             raise
         data = buf.get()
         assert len(InputBuffer().feed_data(data)) == 1
+        if self.writer is None:
+            raise RuntimeError("Not connected")
         self.writer.write(data)
