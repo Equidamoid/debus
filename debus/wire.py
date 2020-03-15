@@ -99,6 +99,8 @@ class WireConnection:
 
     async def _check_auth_result(self):
         result = (await self.reader.readline())
+        if not result:
+            raise ConnectionError("EOF while waiting for auth result")
         result_parts = result.split()
         status = result_parts[0]
         logger.warning("Auth result: %r", result)
@@ -121,6 +123,8 @@ class WireConnection:
     async def _do_auth_cookie(self):
         self.writer.write(b"AUTH DBUS_COOKIE_SHA1 %s\r\n" % binascii.hexlify(getpass.getuser().encode()))
         resp = await self.reader.readline()
+        if not resp:
+            raise EOFError("EOF while waiting for auth methods")
         resp_parts = resp.split()
         if resp_parts[0] == b'REJECTED':
             logger.warning("Dbus cookie auth rejected")
@@ -156,6 +160,9 @@ class WireConnection:
         self.writer.write(b"\0")
         self.writer.write(b"AUTH\r\n")
         response = await self.reader.readline()
+        if not response:
+            raise ConnectionError("EOF while waiting for auth methods")
+
         auth_available = response.split()[1:]
         logger.warning("Auth types available: %s", auth_available)
         external_id_override = os.environ.get('DEBUS_EXTERNAL_USERID', None)
