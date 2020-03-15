@@ -94,8 +94,7 @@ class IntrospectedObject:
                 logger.warning("    %s", ifobj.signals[sname])
 
 
-async def get_freedesktop_interface(conn, name=None):
-    # type: (debus.connection.ClientConnection, str) -> debus.connection.DBusInterface
+async def get_freedesktop_interface(conn: 'ClientConnection', name: str=None) -> 'debus.objects.DBusInterface':
     if name:
         name = 'org.freedesktop.DBus.%s' % name
     else:
@@ -139,16 +138,16 @@ class ClientConnection:
             else:
                 logging.warning("Received unexpected response message: %s", msg)
         elif mt == MessageType.SIGNAL:
-            self.process_signal(msg)
+            self._process_signal(msg)
         elif mt == MessageType.METHOD_CALL:
-            self.process_method_call(msg)
+            self._process_method_call(msg)
         else:
             logger.error("Don't know what to do with this: %s", msg)
 
-    def process_signal(self, msg):
+    def _process_signal(self, msg):
         logger.error("Received a signal: %s", msg)
 
-    def process_method_call(self, msg):
+    def _process_method_call(self, msg):
         logger.error("Received a method call: %s, don't know what to do, sending NotImplemented error", msg)
         err = Message()
         err.message_type = MessageType.ERROR
@@ -214,16 +213,16 @@ class ManagedConnection(ClientConnection):
         self._sub_mgr = debus.subscription.SubscriptionManager(self)
         self._obj_mgr = debus.objects.ObjectManager(self)
 
-    def process_signal(self, msg):
+    def _process_signal(self, msg):
         return self._sub_mgr.handle_message(msg)
 
-    def process_method_call(self, msg):
+    def _process_method_call(self, msg):
         return self._obj_mgr.handle_call(msg)
 
     @property
-    def sub_mgr(self):
+    def sub_mgr(self) -> 'debus.subscription.SubscriptionManager':
         return self._sub_mgr
 
     @property
-    def obj_mgr(self):
+    def obj_mgr(self) -> 'debus.objects.ObjectManager':
         return self._obj_mgr
