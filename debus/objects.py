@@ -151,7 +151,7 @@ class ObjectManager:
         err = debus.Message()
         err.message_type = debus.MessageType.ERROR
         err.destination = method_call.sender
-        err.error_name = 'space.equi.debus.Error.%s' % exc.__class__.__name__
+        err.error_name = 'net.shapranov.debus.Error.%s' % exc.__class__.__name__
         err.reply_serial = method_call.serial
         err.signature = 's'
         err.payload = (repr(exc),)

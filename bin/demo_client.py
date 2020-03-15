@@ -10,10 +10,20 @@ import debus.freedesktop.introspect
 logger = logging.getLogger(__name__)
 
 async def try_dbus():
+    # Some constants to be used
+
+    # The "bus name", a.k.a. the connection name, not to be confused with names of interfaces.
+    # This is an optional way to give your connection a persistent human-friendly name
+    # Only needed if you expect others to call your methods or listen to your signals, not needed for "clients".
+    bus_name = 'net.shapranov.debus.demo_client'
+
+    # Name of the test interface we will implement
+    interface_name = 'net.shapranov.debus.demo'
+
+
     # Let's connect to a bus first
     c = debus.ManagedConnection(uri=debus.SESSION)
     await c.connect()
-
     ## Low-level interface: ClientConnection class
     # Here I will use "private" field c._connection for simplicity,
     # but if you need you can create an instance of ClientConnection yourself
@@ -45,32 +55,36 @@ async def try_dbus():
         logging.warning("pid of '%s' is %s", i, pid)
 
     # Signals!
-    # get a subscription manager
+    # take subscription manager
     sm = c.sub_mgr
 
     # create a callback
-    def on_signal(msg):
+    signal_data = asyncio.Future()
+    def on_signal(msg: debus.Message):
         logging.warning("Callback called for %s", msg)
-        # hacky way to get a boolean to outer scope
-        on_signal.ok = True
+
+        # Notify our "main" that we got the signal and it can proceed
+        signal_data.set_result(msg.payload)
+
         # we only want one signal, so let's unsubscribe immediately
-        sm.unsubscribe(on_signal)
+        asyncio.ensure_future(sm.unsubscribe(on_signal))
 
-    # and subsctribe
-    sm.subscribe(debus.MatchRule(member='NameAcquired'), on_signal)
+    # subscribe for a signal
+    await sm.subscribe(debus.MatchRule(interface='org.freedesktop.DBus', member='NameAcquired'), on_signal)
 
-    # Now let's cause a signal and wait a bit
-    await freedesktop_dbus_if.RequestName('space.equi.pybustest_bus', 0)
-    await asyncio.sleep(2)
-    # ... and we got our signal
-    assert on_signal.ok
+    # RequestName() causes NameAcquired to be broadcasted, let's call it and wait for the signal
+    await freedesktop_dbus_if.RequestName(bus_name, 0)
+
+    # using wait_for to nicely crash if something goes wrong and we don't get the signal in 5 sec
+    await asyncio.wait_for(signal_data, 5000)
+    logger.warning("Data from the signal: %r", signal_data.result())
 
     # Exposing objects
     om = c.obj_mgr
 
     # Define an interface
     class TestIface(debus.objects.DBusInterface):
-        name = 'space.equi.pybustest'
+        name = interface_name
 
         @debus.objects.dbus_method('i', 'i')
         def Test(self, i):
@@ -102,7 +116,7 @@ async def try_dbus():
     om.register_object(obj)
 
     # Now, let's call a method and see what happens
-    remote_if = await c.get_object_interface('space.equi.pybustest_bus', '/test/path', 'space.equi.pybustest')
+    remote_if = await c.get_object_interface(bus_name, '/test/path', interface_name)
     ret = await remote_if.Test(4200)
     logger.warning("Response: %d", ret[0])
     ret = await remote_if.TestAsync(424200)

@@ -153,7 +153,7 @@ class ClientConnection:
         err.message_type = MessageType.ERROR
         err.headers[HeaderField.DESTINATION] = msg.headers[HeaderField.SENDER]
         err.headers[HeaderField.REPLY_SERIAL] = debus.types.enforce_type(msg.serial, b'u')
-        err.headers[HeaderField.ERROR_NAME] = 'space.equi.debus.Error.NotImplemented'
+        err.headers[HeaderField.ERROR_NAME] = 'net.shapranov.debus.Error.NotImplemented'
         self.send_message(err)
 
     def call(self, bus_name, object_path, interface_name, method, signature=None, args=None, timeout=None):
