@@ -67,7 +67,7 @@ class SubscriptionManager:
             i(m)
         return bool(all_callbacks)
 
-    def subscribe(self, match: MatchRule, callback):
+    async def subscribe(self, match: MatchRule, callback):
         if match in self._matches:
             cbl = self._matches[match]
         else:
@@ -75,15 +75,15 @@ class SubscriptionManager:
             self._matches[match] = cbl
             rule = match.rule_str
             logger.info("Subscribing with rule '%s'", rule)
-            self._connection.freedesktop_interface.AddMatch(rule)
+            await self._connection.freedesktop_interface.AddMatch(rule)
         cbl.append(callback)
 
-    def unsubscribe(self, cb):
+    async def unsubscribe(self, cb):
         for match in list(self._matches):
             v = self._matches[match]
             if cb in v:
                 v.remove(cb)
             if not v:
-                self._connection.freedesktop_interface.RemoveMatch(match.rule_str)
+                await self._connection.freedesktop_interface.RemoveMatch(match.rule_str)
                 del self._matches[match]
 
